@@ -22,6 +22,39 @@ export function needsLandscapePrompt(): boolean {
   return isCoarsePointer() && isPhoneScreen() && isPortrait()
 }
 
+export function visualBox(): { left: number; top: number; width: number; height: number } {
+  const vv = window.visualViewport
+  if (vv) return { left: vv.offsetLeft, top: vv.offsetTop, width: vv.width, height: vv.height }
+  return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
+}
+
+export function pinPlaySurface(play: HTMLElement, canvas: HTMLCanvasElement): void {
+  const box = visualBox()
+  play.style.left = `${box.left}px`
+  play.style.top = `${box.top}px`
+  play.style.width = `${Math.round(box.width)}px`
+  play.style.height = `${Math.round(box.height)}px`
+  const width = Math.min(box.width, (box.height * 16) / 9)
+  const height = (width * 9) / 16
+  canvas.style.width = `${Math.round(width)}px`
+  canvas.style.height = `${Math.round(height)}px`
+}
+
+export function watchVisualViewport(onChange: () => void): () => void {
+  const vv = window.visualViewport
+  window.addEventListener('resize', onChange)
+  window.addEventListener('orientationchange', onChange)
+  vv?.addEventListener('resize', onChange)
+  vv?.addEventListener('scroll', onChange)
+  onChange()
+  return () => {
+    window.removeEventListener('resize', onChange)
+    window.removeEventListener('orientationchange', onChange)
+    vv?.removeEventListener('resize', onChange)
+    vv?.removeEventListener('scroll', onChange)
+  }
+}
+
 export async function tryLandscapeLock(): Promise<void> {
   if (!isPhoneScreen()) return
   const orientation = screen.orientation as ScreenOrientation & { lock?: (type: string) => Promise<void> }

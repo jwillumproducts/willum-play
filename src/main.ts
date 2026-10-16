@@ -9,7 +9,15 @@ import { KEY_ICON, PAD_ICON } from './icons'
 import { detectLocale, localeFromPath, localePath, publicUrl, rememberLocale } from './locale'
 import { padDown, samplePads, watchPads, type PadSnapshot } from './pads'
 import { loadSave, writeSave, type SaveData } from './storage'
-import { bindTouchBar, needsLandscapePrompt, touchBarMarkup, tryLandscapeLock, turnOverlayMarkup } from './touch'
+import {
+  bindTouchBar,
+  needsLandscapePrompt,
+  pinPlaySurface,
+  touchBarMarkup,
+  tryLandscapeLock,
+  turnOverlayMarkup,
+  watchVisualViewport,
+} from './touch'
 import type { Action, GameId, KeyCap, LevelConfig, LevelId, PadBrand } from './types'
 
 const root = document.querySelector<HTMLElement>('#app')
@@ -88,7 +96,8 @@ function mount(): void {
   game?.stop()
   game = null
   pauseOpen = false
-  document.documentElement.classList.remove('is-touch-play', 'is-phone-portrait')
+  document.documentElement.classList.remove('is-touch-play', 'is-phone-portrait', 'is-picker')
+  document.documentElement.classList.toggle('is-picker', screen !== 'play')
   if (screen === 'intro') mountIntro()
   else if (screen === 'device') mountDevice()
   else if (screen === 'menu') mountMenu()
@@ -190,6 +199,38 @@ function usingPad(): boolean {
 
 function usingTouch(): boolean {
   return save.device === 'tablet'
+}
+
+function onActivate(el: HTMLElement, fn: () => void): void {
+  let last = 0
+  let startY = 0
+  const run = (event: Event): void => {
+    const now = performance.now()
+    if (now - last < 350) {
+      event.preventDefault()
+      return
+    }
+    last = now
+    fn()
+  }
+  el.addEventListener('click', run)
+  el.addEventListener(
+    'touchstart',
+    (event) => {
+      startY = event.touches[0]?.clientY ?? 0
+    },
+    { passive: true },
+  )
+  el.addEventListener(
+    'touchend',
+    (event) => {
+      const y = event.changedTouches[0]?.clientY ?? startY
+      if (Math.abs(y - startY) > 14) return
+      event.preventDefault()
+      run(event)
+    },
+    { passive: false },
+  )
 }
 
 function faceFor(cap: KeyCap): { label: string } {
@@ -344,22 +385,28 @@ function mountDevice(): void {
   `
   app.querySelectorAll<HTMLCanvasElement>('[data-preview]').forEach((canvas) => paintPreview(canvas))
   bindSettings()
-  app.querySelector<HTMLButtonElement>('[data-device="computer"]')?.addEventListener('click', () => {
-    sound.unlock()
-    persist({ device: 'computer' })
-    screen = 'menu'
-    mount()
-  })
+  const computerBtn = app.querySelector<HTMLButtonElement>('[data-device="computer"]')
+  if (computerBtn) {
+    onActivate(computerBtn, () => {
+      sound.unlock()
+      persist({ device: 'computer' })
+      screen = 'menu'
+      mount()
+    })
+  }
   app.querySelector<HTMLButtonElement>('[data-device="controller"]')?.addEventListener('click', () => {
     if (padSnap.kind === 'ready') acceptPad(padSnap)
     else openPadDialog()
   })
-  app.querySelector<HTMLButtonElement>('[data-device="tablet"]')?.addEventListener('click', () => {
-    sound.unlock()
-    persist({ device: 'tablet' })
-    screen = 'menu'
-    mount()
-  })
+  const tabletBtn = app.querySelector<HTMLButtonElement>('[data-device="tablet"]')
+  if (tabletBtn) {
+    onActivate(tabletBtn, () => {
+      sound.unlock()
+      persist({ device: 'tablet' })
+      screen = 'menu'
+      mount()
+    })
+  }
   app.querySelector<HTMLButtonElement>('[data-action="pad-cancel"]')?.addEventListener('click', closePadDialog)
   app.querySelector<HTMLButtonElement>('[data-action="intro"]')?.addEventListener('click', goIntro)
   unwatch = watchPads((snap) => {
@@ -449,7 +496,7 @@ function mountMenu(): void {
         const label = caps.map((cap) => faceFor(cap).label).join(', ')
         const title = levelTitle(mini.id, level.id)
         return `
-      <button class="choice level-card${last ? ' is-last' : ''}" type="button" data-game="${mini.id}" data-level="${level.id}" style="grid-column: ${level.id + 1}" aria-label="${gameTitle(mini.id)}, ${copy.levelWord} ${level.id}, ${title}, ${label}">
+      <button class="choice level-card${last ? ' is-last' : ''}" type="button" data-game="${mini.id}" data-level="${level.id}" aria-label="${gameTitle(mini.id)}, ${copy.levelWord} ${level.id}, ${title}, ${label}">
         <span class="choice-kicker">${copy.levelWord} ${level.id}<span class="last-mark${last ? '' : ' is-off'}"> · ${copy.lastPicked}</span></span>
         <span class="choice-title">${title}</span>
         <span class="hint" aria-hidden="true">${keysMarkup(level)}</span>
@@ -464,14 +511,14 @@ function mountMenu(): void {
           <canvas data-preview="${mini.id}" width="112" height="80" aria-hidden="true"></canvas>
           <span class="game-name">${gameTitle(mini.id)}</span>
         </div>
-        ${cards}
+        <div class="game-levels">${cards}</div>
       </section>
     `
   }).join('')
 
   const copy = ui()
   app.innerHTML = `
-    <main class="screen">
+    <main class="screen is-picker">
       <h1>${copy.chooseLevel}</h1>
       <p class="lead">${usingPad() || usingTouch() ? copy.practicePad : copy.practiceKey}</p>
       ${usingPad() ? `<p class="pad-status" data-menu-pad>${menuPadLabel(samplePads(), false)}</p>` : ''}
@@ -488,7 +535,7 @@ function mountMenu(): void {
   })
 
   app.querySelectorAll<HTMLButtonElement>('[data-level]').forEach((button) => {
-    button.addEventListener('click', () => {
+    onActivate(button, () => {
       const id = Number(button.dataset.level) as LevelId
       const picked = button.dataset.game
       const gameId = picked === 'hen' || picked === 'car' ? picked : null
@@ -496,8 +543,8 @@ function mountMenu(): void {
       sound.unlock()
       sound.use(clipsFor(gameById(gameId)))
       persist({ game: gameId, level: id })
-      if (usingTouch()) void tryLandscapeLock()
       screen = 'play'
+      if (usingTouch()) void tryLandscapeLock()
       mount()
     })
   })
@@ -650,6 +697,7 @@ function mountPlay(): void {
       <div class="stage">
         ${keybarMarkup(level, touch)}
         <canvas width="1280" height="720"></canvas>
+        ${touch ? touchBarMarkup(level, iconFor, (cap) => faceFor(cap).label) : ''}
         <div class="overlay" data-pause hidden aria-hidden="true">
           <div class="panel">
             <h2>${copy.pause}</h2>
@@ -660,7 +708,6 @@ function mountPlay(): void {
           </div>
         </div>
       </div>
-      ${touch ? touchBarMarkup(level, iconFor, (cap) => faceFor(cap).label) : ''}
       ${turnOverlayMarkup(copy.turnPhone, copy.turnPhoneHint)}
     </div>
     ${settingsMarkup()}
@@ -683,6 +730,8 @@ function mountPlay(): void {
       (pointerId) => game?.releasePointer(pointerId),
     )
     bindPlayGuards(app.querySelector<HTMLElement>('.play') ?? app)
+    const play = app.querySelector<HTMLElement>('.play')
+    if (play) pinPlaySurface(play, canvas)
   }
   game.start()
   unorient = watchOrientation()
@@ -702,14 +751,10 @@ function bindPlayGuards(root: HTMLElement): void {
     event.preventDefault()
   }
   root.addEventListener('contextmenu', block)
+  root.addEventListener('dblclick', block)
   root.addEventListener('gesturestart', block as EventListener)
-  root.addEventListener(
-    'touchmove',
-    (event) => {
-      if (event.touches.length > 1) event.preventDefault()
-    },
-    { passive: false },
-  )
+  root.addEventListener('gesturechange', block as EventListener)
+  root.addEventListener('touchmove', block, { passive: false })
 }
 
 function syncTurnOverlay(): void {
@@ -726,15 +771,23 @@ function syncTurnOverlay(): void {
 }
 
 function watchOrientation(): () => void {
+  const playMove = (event: Event): void => {
+    if (screen === 'play') event.preventDefault()
+  }
   const sync = (): void => {
+    window.scrollTo(0, 0)
+    if (screen === 'play' && usingTouch()) {
+      const play = app.querySelector<HTMLElement>('.play.is-touch')
+      const canvas = app.querySelector<HTMLCanvasElement>('.stage canvas')
+      if (play && canvas) pinPlaySurface(play, canvas)
+    }
     syncTurnOverlay()
   }
-  window.addEventListener('resize', sync)
-  window.addEventListener('orientationchange', sync)
-  sync()
+  document.documentElement.addEventListener('touchmove', playMove, { passive: false })
+  const stop = watchVisualViewport(sync)
   return () => {
-    window.removeEventListener('resize', sync)
-    window.removeEventListener('orientationchange', sync)
+    document.documentElement.removeEventListener('touchmove', playMove)
+    stop()
   }
 }
 
@@ -752,11 +805,13 @@ function keysMarkup(level: LevelConfig): string {
 }
 
 function keybarMarkup(level: LevelConfig, compact = false): string {
+  const pause = `<button class="icon-btn" type="button" aria-label="${ui().pause}"><span class="pause-bars"></span></button>`
+  if (compact) return pause
   const label = capsFor(level).map((cap) => faceFor(cap).label).join(', ')
   return `
-    <div class="keybar${compact ? ' is-compact' : ''}">
-      <button class="icon-btn" type="button" aria-label="${ui().pause}"><span class="pause-bars"></span></button>
-      ${compact ? '' : `<div class="hint" aria-label="${label}">${keysMarkup(level)}</div>`}
+    <div class="keybar">
+      ${pause}
+      <div class="hint" aria-label="${label}">${keysMarkup(level)}</div>
     </div>
   `
 }
