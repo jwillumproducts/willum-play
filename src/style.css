@@ -85,6 +85,34 @@
   margin-block: auto;
 }
 
+.front h1 {
+  order: 1;
+}
+
+.front .flags {
+  order: 2;
+}
+
+.front-tag {
+  order: 3;
+}
+
+.front-art {
+  order: 4;
+}
+
+.front .intro {
+  order: 5;
+}
+
+.front > .choice {
+  order: 6;
+}
+
+.front .credit {
+  order: 7;
+}
+
 .front .flags {
   margin: 0;
 }
@@ -334,7 +362,8 @@ h1 {
 
 .game-mark canvas {
   display: block;
-  width: 100%;
+  width: 96px;
+  max-width: 100%;
   height: auto;
 }
 
@@ -417,16 +446,23 @@ html.is-picker,
 html.is-picker body {
   overflow-x: hidden;
   overflow-y: auto;
+  min-height: 0;
+  height: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   touch-action: manipulation;
 }
 
-.screen.is-picker {
-  justify-content: flex-start;
+html.is-picker #app {
+  min-height: var(--vv-h, 100svh);
 }
 
-@media (max-width: 1100px) {
+.screen.is-picker {
+  justify-content: flex-start;
+  min-height: var(--vv-h, 100svh);
+}
+
+@media (max-width: 1100px) and (orientation: portrait) {
   .game-list {
     width: min(720px, calc(100vw - 24px));
   }
@@ -434,7 +470,7 @@ html.is-picker body {
   .game-row {
     display: flex;
     flex-direction: column;
-    gap: 0.65rem;
+    gap: 0.55rem;
   }
 
   .game-mark {
@@ -442,27 +478,120 @@ html.is-picker body {
     flex-direction: row;
     justify-content: flex-start;
     height: auto;
-    padding: 0.55rem 0.85rem;
-    gap: 0.7rem;
+    padding: 0.45rem 0.75rem;
+    gap: 0.6rem;
   }
 
   .game-mark canvas {
-    width: 72px;
+    width: 64px;
   }
 
   .game-levels {
     grid-template-columns: 1fr 1fr;
-    gap: 0.65rem;
+    gap: 0.55rem;
   }
 
   .level-card {
-    min-height: 7.8rem;
-    padding: 0.95rem 0.7rem 1.05rem;
-    overflow: visible;
+    min-height: 6.8rem;
+    padding: 0.75rem 0.55rem 0.85rem;
+    overflow: hidden;
   }
 
   .level-card .choice-title {
-    font-size: 1.25rem;
+    font-size: 1.15rem;
+  }
+}
+
+@media (max-width: 1100px) and (orientation: landscape) {
+  .screen.is-picker {
+    gap: 0.35rem;
+    padding: max(0.45rem, env(safe-area-inset-top, 0px)) max(0.6rem, env(safe-area-inset-right, 0px))
+      max(0.7rem, env(safe-area-inset-bottom, 0px)) max(0.6rem, env(safe-area-inset-left, 0px));
+  }
+
+  .screen.is-picker h1 {
+    font-size: clamp(1.25rem, 4.2vh, 1.8rem);
+  }
+
+  .screen.is-picker .lead {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+
+  .game-list {
+    width: min(1100px, calc(100vw - 16px));
+    gap: 0.45rem;
+    padding-bottom: 4px;
+  }
+
+  .game-row {
+    display: grid;
+    grid-template-columns: minmax(72px, 96px) minmax(0, 1fr);
+    gap: 0.45rem;
+    align-items: stretch;
+  }
+
+  .game-mark {
+    position: static;
+    flex-direction: column;
+    justify-content: center;
+    height: auto;
+    padding: 0.35rem 0.25rem;
+    gap: 0.2rem;
+    box-shadow: 0 4px 0 #e7b089;
+  }
+
+  .game-mark canvas {
+    width: 56px;
+  }
+
+  .game-name {
+    font-size: 0.85rem;
+  }
+
+  .game-levels {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.4rem;
+  }
+
+  .level-card {
+    min-height: 0;
+    padding: 0.4rem 0.3rem 0.45rem;
+    overflow: hidden;
+    box-shadow: 0 4px 0 #e7b089;
+    border-width: 3px;
+  }
+
+  .level-card .choice-kicker,
+  .level-card .choice-note {
+    font-size: 0.78rem;
+  }
+
+  .level-card .choice-title {
+    font-size: 0.95rem;
+  }
+
+  .level-card .hint {
+    gap: 2px;
+  }
+
+  .level-card .key {
+    width: 22px;
+    min-width: 22px;
+    height: 22px;
+    border-width: 2px;
+    border-radius: 7px;
+    box-shadow: 0 2px 0 #e7b089;
+  }
+
+  .level-card .key-space {
+    width: 32px;
+    min-width: 28px;
+  }
+
+  .screen.is-picker .link {
+    margin-top: 0.15rem;
+    font-size: 1rem;
   }
 }
 
@@ -476,6 +605,7 @@ html.is-picker body {
 }
 
 .play {
+  position: relative;
   min-height: 100vh;
   display: grid;
   place-items: center;
@@ -615,9 +745,13 @@ html.is-picker body {
 .overlay {
   position: absolute;
   inset: 0;
+  z-index: 8;
   background: rgba(92, 59, 50, 0.28);
   display: grid;
   place-items: center;
+  padding: max(8px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px))
+    max(8px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+  overflow: hidden;
 }
 
 .overlay[hidden],
@@ -628,12 +762,17 @@ html.is-picker body {
 
 .overlay.overlay-page {
   position: fixed;
-  z-index: 2;
+  z-index: 12;
+  inset: 0;
+  width: var(--vv-w, 100svw);
+  height: var(--vv-h, 100svh);
+  max-width: 100svw;
+  max-height: 100svh;
 }
 
 .panel {
-  width: min(420px, calc(100% - 20px));
-  max-height: calc(100% - 12px);
+  width: min(420px, calc(100% - 16px));
+  max-height: min(calc(100% - 8px), calc(var(--vv-h, 100svh) - 16px));
   background: #fffaf3;
   border-radius: 24px;
   padding: 0.7rem 0.85rem;
@@ -641,6 +780,8 @@ html.is-picker body {
   flex-direction: column;
   gap: 0.4rem;
   overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   box-shadow: 0 12px 40px rgba(92, 59, 50, 0.18);
 }
 
@@ -655,10 +796,28 @@ html.is-picker body {
   border-width: 3px;
   border-radius: 1rem;
   box-shadow: 0 4px 0 #e7b089;
+  min-height: 44px;
 }
 
 .panel .choice-title {
   font-size: 1.25rem;
+}
+
+.panel-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.panel-grid > h2,
+.panel-grid > .pad-help,
+.panel-grid > .flags,
+.panel-grid > .credit {
+  grid-column: 1 / -1;
+}
+
+.panel-grid .sound-btn {
+  margin: 0 auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -764,15 +923,26 @@ html.is-touch-play #app {
 .play.is-touch .icon-btn {
   position: absolute;
   z-index: 4;
-  top: max(8px, env(safe-area-inset-top, 0px));
-  left: max(8px, env(safe-area-inset-left, 0px));
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  background: rgba(255, 250, 243, 0.72);
-  box-shadow: 0 4px 0 rgba(231, 176, 137, 0.45);
+  top: max(6px, env(safe-area-inset-top, 0px));
+  left: max(6px, env(safe-area-inset-left, 0px));
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border-width: 1.5px;
+  border-color: rgba(92, 59, 50, 0.28);
+  background: rgba(255, 250, 243, 0.22);
+  box-shadow: none;
+  opacity: 0.42;
 }
 
+.play.is-touch .pause-bars {
+  width: 14px;
+  height: 18px;
+  border-left-width: 4px;
+  border-right-width: 4px;
+}
+
+.touch-bar,
 .play.is-touch .touch-bar {
   position: absolute;
   left: 0;
@@ -782,64 +952,37 @@ html.is-touch-play #app {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  padding: 8px max(10px, env(safe-area-inset-left, 0px)) calc(8px + env(safe-area-inset-bottom, 0px))
-    max(10px, env(safe-area-inset-right, 0px));
-  background: linear-gradient(180deg, rgba(232, 184, 146, 0) 0%, rgba(92, 59, 50, 0.18) 100%);
-  pointer-events: none;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-}
-
-.play.is-touch.is-short .touch-bar {
-  padding: 4px max(8px, env(safe-area-inset-left, 0px)) calc(4px + env(safe-area-inset-bottom, 0px))
-    max(8px, env(safe-area-inset-right, 0px));
   gap: 8px;
-}
-
-.play.is-touch.is-short .touch-btn {
-  width: 72px;
-  height: 72px;
-}
-
-.touch-bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 3;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
   width: 100%;
-  padding: 8px max(12px, env(safe-area-inset-left, 0px)) calc(8px + env(safe-area-inset-bottom, 0px))
-    max(12px, env(safe-area-inset-right, 0px));
+  padding: 4px max(4px, env(safe-area-inset-left, 0px)) calc(4px + env(safe-area-inset-bottom, 0px))
+    max(4px, env(safe-area-inset-right, 0px));
   background: transparent;
   pointer-events: none;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+  transition: opacity 0.55s ease;
+}
+
+.touch-bar.is-idle {
+  opacity: 0.45;
 }
 
 .touch-btn {
   pointer-events: auto;
-  min-width: 72px;
-  min-height: 72px;
-  width: clamp(72px, 12vmin, 96px);
-  height: clamp(72px, 12vmin, 96px);
+  width: 60px;
+  height: 60px;
+  min-width: 56px;
+  min-height: 56px;
   padding: 0;
-  border: 4px solid rgba(231, 176, 137, 0.9);
-  border-radius: 22px;
-  background: rgba(255, 250, 243, 0.62);
-  box-shadow: 0 4px 0 rgba(231, 176, 137, 0.4);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
   display: grid;
   place-items: center;
   color: #5c3b32;
+  opacity: 0.36;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
@@ -847,32 +990,61 @@ html.is-touch-play #app {
   -webkit-tap-highlight-color: transparent;
 }
 
+.touch-glyph {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid rgba(92, 59, 50, 0.42);
+  background: rgba(255, 250, 243, 0.1);
+  box-shadow: none;
+}
+
+.touch-dpad .touch-glyph {
+  border-radius: 10px;
+}
+
+.touch-actions .touch-glyph {
+  border-radius: 50%;
+}
+
 .touch-btn svg {
   display: block;
-  width: 52%;
-  height: 52%;
+  width: 58%;
+  height: 58%;
 }
 
 .touch-btn.is-new {
-  border-color: #e07a5f;
-  box-shadow: 0 4px 0 rgba(224, 122, 95, 0.45);
-  background: rgba(255, 241, 230, 0.72);
+  opacity: 0.48;
+}
+
+.touch-btn.is-new .touch-glyph {
+  border-color: rgba(224, 122, 95, 0.7);
 }
 
 .touch-btn.is-on {
-  transform: translateY(4px);
-  box-shadow: 0 2px 0 rgba(231, 176, 137, 0.4);
-  background: rgba(255, 232, 163, 0.82);
+  opacity: 0.72;
+  transform: none;
 }
 
-.touch-btn.is-new.is-on {
-  box-shadow: 0 2px 0 #e07a5f;
+.touch-btn.is-on .touch-glyph {
+  background: rgba(255, 232, 163, 0.28);
+  border-color: rgba(92, 59, 50, 0.55);
 }
 
-.touch-x,
+.play.is-touch.is-short .touch-btn {
+  width: 56px;
+  height: 56px;
+}
+
+.play.is-touch.is-short .touch-glyph {
+  width: 28px;
+  height: 28px;
+}
+
 .touch-actions {
   display: flex;
-  gap: 12px;
+  gap: 4px;
   align-items: flex-end;
 }
 
@@ -882,8 +1054,13 @@ html.is-touch-play #app {
     ". up ."
     "left . right"
     ". down .";
-  grid-template-columns: auto auto auto;
-  gap: 8px;
+  grid-template-columns: 56px 56px 56px;
+  grid-auto-rows: min-content;
+  gap: 0;
+}
+
+.play.is-touch.is-short .touch-dpad {
+  grid-template-columns: 56px 56px 56px;
 }
 
 .touch-dpad [data-touch='moveUp'] {
@@ -993,20 +1170,200 @@ html.is-touch-play #app {
   }
 }
 
-@media (orientation: landscape) and (max-height: 560px) {
-  .play.is-touch {
-    --touch-bar-size: 108px;
+@media (max-height: 820px) {
+  .front {
+    gap: 0.55rem;
   }
 
-  .touch-dpad {
-    display: flex;
-    flex-direction: row;
+  .front-tag {
+    order: 3;
+  }
+
+  .front > .choice {
+    order: 4;
+  }
+
+  .front .credit {
+    order: 5;
+  }
+
+  .front-art {
+    order: 6;
+  }
+
+  .front .intro {
+    order: 7;
+  }
+}
+
+@media (max-height: 500px) {
+  h1 {
+    font-size: clamp(1.35rem, 5vh, 2rem);
+  }
+
+  .front > .choice {
+    order: 4;
+  }
+
+  .front-art {
+    max-height: 88px;
+    overflow: hidden;
+  }
+
+  .front .intro {
+    display: none;
+  }
+
+  .screen {
+    gap: 0.35rem;
+    padding: max(0.45rem, env(safe-area-inset-top, 0px)) max(0.6rem, env(safe-area-inset-right, 0px))
+      max(0.7rem, env(safe-area-inset-bottom, 0px)) max(0.6rem, env(safe-area-inset-left, 0px));
+  }
+
+  .front {
+    gap: 0.4rem;
+  }
+
+  .front .intro {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.92rem;
+    line-height: 1.35;
+    gap: 0.35rem;
+    box-shadow: 0 4px 0 #e7b089;
+    border-width: 3px;
+  }
+
+  .front-art canvas,
+  .front-art.is-hero canvas {
+    width: 72px;
+  }
+
+  .choice {
+    padding: 0.45rem 0.75rem;
+    box-shadow: 0 4px 0 #e7b089;
+    border-width: 3px;
+  }
+
+  .choice-title {
+    font-size: 1.2rem;
+  }
+
+  .panel {
+    width: min(640px, calc(100% - 12px));
+    max-height: calc(var(--vv-h, 100svh) - 12px);
+    padding: 0.4rem 0.55rem;
+    gap: 0.28rem;
+    border-radius: 16px;
+  }
+
+  .panel h2 {
+    font-size: 1.05rem;
+    margin: 0;
+    padding: 0.15rem 0 0.3rem;
+    line-height: 1.15;
+    flex: 0 0 auto;
+    min-height: 1.35em;
+  }
+
+  .panel-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.35rem;
+    align-items: stretch;
+  }
+
+  .panel-grid .sound-btn {
+    width: 48px;
+    height: 48px;
+    margin: 0;
+    justify-self: center;
+    align-self: center;
+    box-shadow: 0 3px 0 #e7b089;
+    border-width: 3px;
+  }
+
+  .panel-grid .sound-btn svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .panel .choice {
+    min-height: 44px;
+    padding: 0.35rem 0.5rem;
+    justify-content: center;
     align-items: center;
-    gap: 10px;
+    text-align: center;
   }
 
-  .touch-bar {
-    padding-top: 6px;
-    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+  .panel .choice-title {
+    font-size: 1rem;
+  }
+
+  .panel .flags {
+    margin: 0;
+    gap: 0.25rem;
+  }
+
+  .panel .flag {
+    width: 36px;
+    height: 24px;
+  }
+
+  .panel .credit,
+  .panel .pad-help {
+    font-size: 0.85rem;
+    margin: 0;
+  }
+
+  .play.is-touch .overlay .panel {
+    width: min(520px, calc(100% - 8px));
+  }
+}
+
+@media (max-height: 430px) {
+  .screen:not(.is-front) .front-art {
+    display: none;
+  }
+
+  .screen .lead {
+    font-size: 1rem;
+    margin: 0;
+  }
+
+  .stack {
+    gap: 0.35rem;
+  }
+}
+
+@media (max-width: 1100px) and (orientation: landscape) and (max-height: 340px) {
+  .screen.is-picker .lead {
+    display: none;
+  }
+
+  .screen.is-picker h1 {
+    font-size: 1.15rem;
+  }
+
+  .level-card .hint {
+    display: none;
+  }
+
+  .level-card {
+    padding: 0.28rem 0.3rem 0.32rem;
+  }
+}
+
+@media (max-height: 360px) {
+  .front-art,
+  .screen .front-art {
+    display: none;
+  }
+
+  .credit {
+    display: none;
+  }
+
+  .choice-note {
+    display: none;
   }
 }

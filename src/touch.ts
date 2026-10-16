@@ -149,11 +149,10 @@ export function touchBarMarkup(
     if (!enabled.has(action)) return ''
     const cap = ACTION_CAP[action]
     const neu = hinted.has(action) ? ' is-new' : ''
-    return `<button class="touch-btn${neu}" type="button" data-touch="${action}" data-key="${cap}" aria-label="${labelFor(cap)}">${iconFor(cap)}</button>`
+    return `<button class="touch-btn${neu}" type="button" data-touch="${action}" data-key="${cap}" aria-label="${labelFor(cap)}"><span class="touch-glyph">${iconFor(cap)}</span></button>`
   }
-  const hasY = enabled.has('moveUp') || enabled.has('moveDown')
   const move = `
-    <div class="${hasY ? 'touch-dpad' : 'touch-x'}" data-touch-move>
+    <div class="touch-dpad" data-touch-move>
       ${button('moveUp')}
       ${button('moveLeft')}
       ${button('moveRight')}
@@ -183,6 +182,8 @@ export function turnOverlayMarkup(title: string, hint: string): string {
   `
 }
 
+const TOUCH_IDLE_MS = 2400
+
 export function bindTouchBar(
   root: HTMLElement,
   hold: (pointerId: number, action: Action) => void,
@@ -190,6 +191,13 @@ export function bindTouchBar(
 ): void {
   const bar = root.querySelector<HTMLElement>('[data-touch-bar]')
   if (!bar) return
+  let idleTimer = 0
+  const poke = (): void => {
+    bar.classList.remove('is-idle')
+    window.clearTimeout(idleTimer)
+    idleTimer = window.setTimeout(() => bar.classList.add('is-idle'), TOUCH_IDLE_MS)
+  }
+  poke()
   bar.addEventListener('contextmenu', (event) => event.preventDefault())
   bar.addEventListener(
     'touchmove',
@@ -202,6 +210,7 @@ export function bindTouchBar(
     const action = button.dataset.touch as Action
     const down = (event: PointerEvent): void => {
       event.preventDefault()
+      poke()
       try {
         button.setPointerCapture(event.pointerId)
       } catch {
@@ -211,6 +220,7 @@ export function bindTouchBar(
     }
     const up = (event: PointerEvent): void => {
       event.preventDefault()
+      poke()
       try {
         if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId)
       } catch {

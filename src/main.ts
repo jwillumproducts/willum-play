@@ -16,6 +16,7 @@ import {
   touchBarMarkup,
   tryLandscapeLock,
   turnOverlayMarkup,
+  visualBox,
   watchVisualViewport,
 } from './touch'
 import type { Action, GameId, KeyCap, LevelConfig, LevelId, PadBrand } from './types'
@@ -86,6 +87,7 @@ function persist(partial: Partial<SaveData>): void {
 }
 
 function mount(): void {
+  window.scrollTo(0, 0)
   unwatch?.()
   unwatch = null
   unorient?.()
@@ -104,6 +106,13 @@ function mount(): void {
   else if (screen === 'device') mountDevice()
   else if (screen === 'menu') mountMenu()
   else mountPlay()
+  if (screen !== 'play') {
+    unorient = watchVisualViewport(() => {
+      const box = visualBox()
+      document.documentElement.style.setProperty('--vv-w', `${Math.round(box.width)}px`)
+      document.documentElement.style.setProperty('--vv-h', `${Math.round(box.height)}px`)
+    })
+  }
 }
 
 function mountIntro(): void {
@@ -137,7 +146,8 @@ function mountIntro(): void {
   `
   app.querySelectorAll<HTMLCanvasElement>('[data-preview]').forEach((canvas) => paintPreview(canvas))
   bindFlags()
-  app.querySelector<HTMLButtonElement>('[data-action="device"]')?.addEventListener('click', goDevice)
+  const start = app.querySelector<HTMLButtonElement>('[data-action="device"]')
+  if (start) onActivate(start, goDevice)
 }
 
 function goDevice(): void {
@@ -286,14 +296,16 @@ function settingsMarkup(): string {
   const copy = ui()
   return `
     <div class="overlay overlay-page" data-settings hidden>
-      <div class="panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="panel panel-settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <h2 id="settings-title">${copy.settings}</h2>
         <p class="pad-help">${copy.language}</p>
         ${flagsMarkup()}
-        <button class="sound-btn" type="button" data-sound aria-label="${sound.muted ? copy.soundOn : copy.soundOff}">${soundIcon(sound.muted)}</button>
-        <button class="choice" type="button" data-settings-action="device"><span class="choice-title">${copy.switchDevice}</span></button>
-        <button class="choice" type="button" data-settings-action="intro"><span class="choice-title">${copy.about}</span></button>
-        <button class="choice" type="button" data-settings-action="close"><span class="choice-title">${copy.cancel}</span></button>
+        <div class="panel-grid">
+          <button class="sound-btn" type="button" data-sound aria-label="${sound.muted ? copy.soundOn : copy.soundOff}">${soundIcon(sound.muted)}</button>
+          <button class="choice" type="button" data-settings-action="device"><span class="choice-title">${copy.switchDevice}</span></button>
+          <button class="choice" type="button" data-settings-action="intro"><span class="choice-title">${copy.about}</span></button>
+          <button class="choice" type="button" data-settings-action="close"><span class="choice-title">${copy.cancel}</span></button>
+        </div>
         <p class="credit">${copy.credit}</p>
       </div>
     </div>
@@ -301,19 +313,28 @@ function settingsMarkup(): string {
 }
 
 function bindSettings(): void {
-  app.querySelector<HTMLButtonElement>('[data-open-settings]')?.addEventListener('click', openSettings)
-  app.querySelector<HTMLButtonElement>('[data-settings-action="close"]')?.addEventListener('click', closeSettings)
-  app.querySelector<HTMLButtonElement>('[data-settings] [data-sound]')?.addEventListener('click', toggleSound)
-  app.querySelector<HTMLButtonElement>('[data-settings-action="device"]')?.addEventListener('click', () => {
-    closeSettings()
-    if (screen === 'device') return
-    goDevice()
-  })
-  app.querySelector<HTMLButtonElement>('[data-settings-action="intro"]')?.addEventListener('click', () => {
-    closeSettings()
-    if (screen === 'intro') return
-    goIntro()
-  })
+  const open = app.querySelector<HTMLButtonElement>('[data-open-settings]')
+  if (open) onActivate(open, openSettings)
+  const close = app.querySelector<HTMLButtonElement>('[data-settings-action="close"]')
+  if (close) onActivate(close, closeSettings)
+  const soundBtn = app.querySelector<HTMLButtonElement>('[data-settings] [data-sound]')
+  if (soundBtn) onActivate(soundBtn, toggleSound)
+  const toDevice = app.querySelector<HTMLButtonElement>('[data-settings-action="device"]')
+  if (toDevice) {
+    onActivate(toDevice, () => {
+      closeSettings()
+      if (screen === 'device') return
+      goDevice()
+    })
+  }
+  const toIntro = app.querySelector<HTMLButtonElement>('[data-settings-action="intro"]')
+  if (toIntro) {
+    onActivate(toIntro, () => {
+      closeSettings()
+      if (screen === 'intro') return
+      goIntro()
+    })
+  }
   bindFlags()
 }
 
@@ -551,10 +572,13 @@ function mountMenu(): void {
     })
   })
 
-  app.querySelector<HTMLButtonElement>('[data-action="device"]')?.addEventListener('click', () => {
-    screen = 'device'
-    mount()
-  })
+  const backDevice = app.querySelector<HTMLButtonElement>('[data-action="device"]')
+  if (backDevice) {
+    onActivate(backDevice, () => {
+      screen = 'device'
+      mount()
+    })
+  }
 
   if (usingPad()) unwatch = watchMenuPad()
 }
@@ -681,7 +705,6 @@ function paintPreview(canvas: HTMLCanvasElement): void {
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
   canvas.width = Math.round(width * dpr)
   canvas.height = Math.round(height * dpr)
-  canvas.style.width = '100%'
   canvas.style.height = 'auto'
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   if (preview === 'hen') drawHenMark(ctx, width, height)
@@ -700,15 +723,17 @@ function mountPlay(): void {
         ${keybarMarkup(level, touch)}
         <canvas width="1280" height="720"></canvas>
         ${touch ? touchBarMarkup(level, iconFor, (cap) => faceFor(cap).label) : ''}
-        <div class="overlay" data-pause hidden aria-hidden="true">
-          <div class="panel">
-            <h2>${copy.pause}</h2>
-            <button class="choice" type="button" data-action="resume"><span class="choice-title">${copy.resume}</span></button>
-            <button class="choice" type="button" data-action="menu"><span class="choice-title">${copy.switchLevel}</span></button>
-            <button class="sound-btn" type="button" data-sound aria-label="${sound.muted ? copy.soundOn : copy.soundOff}">${soundIcon(sound.muted)}</button>
-            <button class="choice" type="button" data-open-settings><span class="choice-title">${copy.settings}</span></button>
+      </div>
+      <div class="overlay overlay-pause" data-pause hidden aria-hidden="true">
+        <div class="panel panel-pause">
+            <div class="panel-grid">
+              <h2>${copy.pause}</h2>
+              <button class="choice" type="button" data-action="resume"><span class="choice-title">${copy.resume}</span></button>
+              <button class="choice" type="button" data-action="menu"><span class="choice-title">${copy.switchLevel}</span></button>
+              <button class="sound-btn" type="button" data-sound aria-label="${sound.muted ? copy.soundOn : copy.soundOff}">${soundIcon(sound.muted)}</button>
+              <button class="choice" type="button" data-open-settings><span class="choice-title">${copy.settings}</span></button>
+            </div>
           </div>
-        </div>
       </div>
       ${turnOverlayMarkup(copy.turnPhone, copy.turnPhoneHint)}
     </div>
@@ -738,14 +763,20 @@ function mountPlay(): void {
   game.start()
   unorient = watchOrientation()
 
-  app.querySelector<HTMLButtonElement>('.icon-btn')?.addEventListener('click', openPause)
-  app.querySelector<HTMLButtonElement>('[data-action="resume"]')?.addEventListener('click', closePause)
-  app.querySelector<HTMLButtonElement>('[data-action="menu"]')?.addEventListener('click', () => {
-    sound.unlock()
-    screen = 'menu'
-    mount()
-  })
-  app.querySelector<HTMLButtonElement>('[data-pause] [data-sound]')?.addEventListener('click', toggleSound)
+  const pauseBtn = app.querySelector<HTMLButtonElement>('.icon-btn')
+  if (pauseBtn) onActivate(pauseBtn, openPause)
+  const resumeBtn = app.querySelector<HTMLButtonElement>('[data-action="resume"]')
+  if (resumeBtn) onActivate(resumeBtn, closePause)
+  const menuBtn = app.querySelector<HTMLButtonElement>('[data-action="menu"]')
+  if (menuBtn) {
+    onActivate(menuBtn, () => {
+      sound.unlock()
+      screen = 'menu'
+      mount()
+    })
+  }
+  const pauseSound = app.querySelector<HTMLButtonElement>('[data-pause] [data-sound]')
+  if (pauseSound) onActivate(pauseSound, toggleSound)
 }
 
 function bindPlayGuards(root: HTMLElement): void {
