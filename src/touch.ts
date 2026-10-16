@@ -10,34 +10,87 @@ export function isCoarsePointer(): boolean {
   )
 }
 
+function positive(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+function smallViewport(): { width: number; height: number } {
+  const probe = document.createElement('div')
+  probe.style.cssText =
+    'position:fixed;left:0;top:0;width:100svw;height:100svh;pointer-events:none;visibility:hidden'
+  document.documentElement.appendChild(probe)
+  const rect = probe.getBoundingClientRect()
+  probe.remove()
+  return {
+    width: positive(rect.width, Number.POSITIVE_INFINITY),
+    height: positive(rect.height, Number.POSITIVE_INFINITY),
+  }
+}
+
+export function visualBox(): { left: number; top: number; width: number; height: number } {
+  const vv = window.visualViewport
+  const innerW = positive(window.innerWidth, 1)
+  const innerH = positive(window.innerHeight, 1)
+  const clientW = positive(document.documentElement.clientWidth, innerW)
+  const clientH = positive(document.documentElement.clientHeight, innerH)
+  const vvW = positive(vv?.width, innerW)
+  const vvH = positive(vv?.height, innerH)
+  const sv = smallViewport()
+  return {
+    left: vv?.offsetLeft ?? 0,
+    top: vv?.offsetTop ?? 0,
+    width: Math.max(1, Math.min(vvW, innerW, clientW, sv.width)),
+    height: Math.max(1, Math.min(vvH, innerH, clientH, sv.height)),
+  }
+}
+
 export function isPhoneScreen(): boolean {
-  return Math.min(window.innerWidth, window.innerHeight) < PHONE_SHORT_SIDE
+  const box = visualBox()
+  return Math.min(box.width, box.height) < PHONE_SHORT_SIDE
 }
 
 export function isPortrait(): boolean {
-  return window.innerHeight > window.innerWidth
+  const box = visualBox()
+  return box.height > box.width
 }
 
 export function needsLandscapePrompt(): boolean {
   return isCoarsePointer() && isPhoneScreen() && isPortrait()
 }
 
-export function visualBox(): { left: number; top: number; width: number; height: number } {
-  const vv = window.visualViewport
-  if (vv) return { left: vv.offsetLeft, top: vv.offsetTop, width: vv.width, height: vv.height }
-  return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
-}
-
-export function pinPlaySurface(play: HTMLElement, canvas: HTMLCanvasElement): void {
+export function pinPlaySurface(play: HTMLElement, stage: HTMLElement, canvas: HTMLCanvasElement): void {
   const box = visualBox()
+  const viewW = Math.round(box.width)
+  const viewH = Math.round(box.height)
+  const root = document.documentElement
+  root.style.setProperty('--vv-w', `${viewW}px`)
+  root.style.setProperty('--vv-h', `${viewH}px`)
+
+  play.style.position = 'fixed'
+  play.style.inset = 'auto'
+  play.style.right = 'auto'
+  play.style.bottom = 'auto'
   play.style.left = `${box.left}px`
   play.style.top = `${box.top}px`
-  play.style.width = `${Math.round(box.width)}px`
-  play.style.height = `${Math.round(box.height)}px`
-  const width = Math.min(box.width, (box.height * 16) / 9)
+  play.style.width = `${viewW}px`
+  play.style.height = `${viewH}px`
+  play.style.minWidth = '0'
+  play.style.minHeight = '0'
+  play.style.maxWidth = `${viewW}px`
+  play.style.maxHeight = `${viewH}px`
+  play.classList.toggle('is-short', viewH <= 340)
+
+  const width = Math.min(viewW, (viewH * 16) / 9)
   const height = (width * 9) / 16
-  canvas.style.width = `${Math.round(width)}px`
-  canvas.style.height = `${Math.round(height)}px`
+  const stageW = Math.max(1, Math.round(width))
+  const stageH = Math.max(1, Math.round(height))
+  stage.style.width = `${stageW}px`
+  stage.style.height = `${stageH}px`
+  stage.style.maxWidth = `${viewW}px`
+  stage.style.maxHeight = `${viewH}px`
+  stage.style.minHeight = '0'
+  canvas.style.width = '100%'
+  canvas.style.height = '100%'
 }
 
 export function watchVisualViewport(onChange: () => void): () => void {

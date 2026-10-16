@@ -97,6 +97,8 @@ function mount(): void {
   game = null
   pauseOpen = false
   document.documentElement.classList.remove('is-touch-play', 'is-phone-portrait', 'is-picker')
+  document.documentElement.style.removeProperty('--vv-w')
+  document.documentElement.style.removeProperty('--vv-h')
   document.documentElement.classList.toggle('is-picker', screen !== 'play')
   if (screen === 'intro') mountIntro()
   else if (screen === 'device') mountDevice()
@@ -731,7 +733,7 @@ function mountPlay(): void {
     )
     bindPlayGuards(app.querySelector<HTMLElement>('.play') ?? app)
     const play = app.querySelector<HTMLElement>('.play')
-    if (play) pinPlaySurface(play, canvas)
+    if (play) pinPlaySurface(play, stage, canvas)
   }
   game.start()
   unorient = watchOrientation()
@@ -778,8 +780,9 @@ function watchOrientation(): () => void {
     window.scrollTo(0, 0)
     if (screen === 'play' && usingTouch()) {
       const play = app.querySelector<HTMLElement>('.play.is-touch')
+      const stageEl = app.querySelector<HTMLElement>('.stage')
       const canvas = app.querySelector<HTMLCanvasElement>('.stage canvas')
-      if (play && canvas) pinPlaySurface(play, canvas)
+      if (play && stageEl && canvas) pinPlaySurface(play, stageEl, canvas)
     }
     syncTurnOverlay()
   }
