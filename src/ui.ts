@@ -13,6 +13,7 @@ export const ACCENT = '#e07a5f'
 export const TEXT_PT = 16
 export const HEAD_PT = 22
 export const TAP_PT = 64
+export const MIN_HIT = 44
 export const FLAG_HIT = 44
 
 export interface FontMark {
@@ -167,9 +168,10 @@ export function drawButton(
   note: string | undefined,
   pressed: boolean,
   current = false,
+  minHit = TAP_PT,
 ): void {
-  const height = Math.max(TAP_PT, h)
-  const width = Math.max(TAP_PT, w)
+  const height = Math.max(minHit, h)
+  const width = Math.max(minHit, w)
   fillRound(
     ctx,
     x,

@@ -3,7 +3,7 @@ import { Sound } from './audio'
 import { BRAND, COPY, fill, isLocale, type Copy, type Locale } from './copy'
 import { Game } from './game'
 import { gameById } from './games'
-import { drawPad, layoutPad, padAt, padNeed, type PadButton } from './gamepad'
+import { drawPad, layoutPad, padAt, maxPadNeed, padSlots, type PadButton } from './gamepad'
 import { detectLocale, localeFromPath, localePath, publicUrl, rememberLocale } from './locale'
 import { samplePads, type PadSnapshot } from './pads'
 import {
@@ -54,12 +54,8 @@ let hits: Hit[] = []
 let padButtons: PadButton[] = []
 let pressed: string | null = null
 let scroll = 0
-let maxScroll = 0
 let padSnap: PadSnapshot = samplePads()
 let lastInput = performance.now()
-let dragging = false
-let dragY = 0
-let dragScroll = 0
 const pointers = new Map<number, Action | 'pause'>()
 let heldCaps: string[] = []
 
@@ -171,12 +167,24 @@ function currentActions(): Action[] {
 }
 
 function sizeCanvas(): void {
-  const need = route === 'play' && usingTouch() ? padNeed(currentActions()) : { left: 0, right: 0, deck: 0 }
+  const need = route === 'play' && usingTouch() ? maxPadNeed() : { left: 0, right: 0, deck: 0 }
   layout = computeLayout(route !== 'play', need)
+  const boxW = `${layout.viewW}px`
+  const boxH = `${layout.viewH}px`
+  for (const el of [document.documentElement, document.body]) {
+    el.style.width = boxW
+    el.style.height = boxH
+    el.style.maxWidth = boxW
+    el.style.maxHeight = boxH
+    el.style.overflow = 'hidden'
+  }
   root.style.left = `${layout.left}px`
   root.style.top = `${layout.top}px`
-  root.style.width = `${layout.viewW}px`
-  root.style.height = `${layout.viewH}px`
+  root.style.width = boxW
+  root.style.height = boxH
+  root.style.maxWidth = boxW
+  root.style.maxHeight = boxH
+  root.style.overflow = 'hidden'
   canvas.style.left = '0'
   canvas.style.top = '0'
   canvas.style.width = '100%'
@@ -185,6 +193,7 @@ function sizeCanvas(): void {
   const ph = Math.max(1, Math.round(layout.viewH * layout.dpr))
   if (canvas.width !== pw) canvas.width = pw
   if (canvas.height !== ph) canvas.height = ph
+  window.scrollTo(0, 0)
 }
 
 function paint(now: number): void {
@@ -214,7 +223,7 @@ function paint(now: number): void {
   const st = state()
   if (route === 'intro') drawIntro(ctx, hits, layout, st)
   else if (route === 'device') drawDevice(ctx, hits, layout, st)
-  else if (route === 'menu') maxScroll = drawPicker(ctx, hits, layout, st)
+  else if (route === 'menu') drawPicker(ctx, hits, layout, st)
   else if (route === 'play') {
     if (usingTouch() && game) {
       padButtons = layoutPad(layout, currentActions())
@@ -262,11 +271,6 @@ function onDown(event: PointerEvent): void {
   sound.unlock()
   lastInput = performance.now()
   const p = cssPoint(event)
-  if (route === 'menu' && overlay === null) {
-    dragging = true
-    dragY = p.y
-    dragScroll = scroll
-  }
   if (route === 'play' && overlay === null && usingTouch()) {
     const btn = padAt(padButtons, p.x, p.y)
     if (btn) {
@@ -291,14 +295,7 @@ function onDown(event: PointerEvent): void {
   }
 }
 
-function onMove(event: PointerEvent): void {
-  if (!dragging) return
-  const p = cssPoint(event)
-  scroll = Math.min(maxScroll, Math.max(0, dragScroll + (dragY - p.y)))
-}
-
 function onUp(event: PointerEvent): void {
-  dragging = false
   const action = pointers.get(event.pointerId)
   if (action && action !== 'pause') game?.releasePointer(event.pointerId)
   pointers.delete(event.pointerId)
@@ -430,6 +427,21 @@ function exposeDebug(): void {
     layout,
     hits,
     chicken: game?.snapshot() ?? null,
+    clusters:
+      route === 'play'
+        ? {
+            scene: { x: layout.sceneX, y: layout.sceneY, w: layout.sceneW, h: layout.sceneH },
+            dpad: padSlots(layout).dpad,
+            action: padSlots(layout).actionRect,
+            origin: { x: padSlots(layout).originX, y: padSlots(layout).originY },
+          }
+        : null,
+    page: {
+      scrollHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
+      clientHeight: document.documentElement.clientHeight,
+      innerHeight: window.innerHeight,
+      scrollY: window.scrollY,
+    },
     scale: layout.scale,
     fonts: fontMarks.map((m) => ({ text: m.text, pt: m.pt, role: m.role })),
     taps: menuHits.map((h) => ({ id: h.id, w: h.w, h: h.h, fontPt: h.fontPt })),
@@ -455,9 +467,7 @@ function exposeDebug(): void {
 }
 
 function onWheel(event: WheelEvent): void {
-  if (route !== 'menu') return
   event.preventDefault()
-  scroll = Math.min(maxScroll, Math.max(0, scroll + event.deltaY))
 }
 
 function onKey(event: KeyboardEvent): void {
@@ -472,7 +482,6 @@ function onKey(event: KeyboardEvent): void {
 }
 
 canvas.addEventListener('pointerdown', onDown)
-canvas.addEventListener('pointermove', onMove)
 canvas.addEventListener('pointerup', onUp)
 canvas.addEventListener('pointercancel', onUp)
 canvas.addEventListener('wheel', onWheel, { passive: false })

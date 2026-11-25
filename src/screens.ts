@@ -12,6 +12,7 @@ import {
   PEACH,
   SAND,
   TAP_PT,
+  MIN_HIT,
   TEXT_PT,
   addHit,
   drawButton,
@@ -61,17 +62,12 @@ interface Stage {
   bottom: number
 }
 
-function stage(layout: ViewLayout): Stage {
-  const pad = 12
+function stage(layout: ViewLayout, pad = 12): Stage {
   const x = layout.sceneX + pad + layout.safe.l
   const y = layout.sceneY + pad + layout.safe.t
   const w = Math.max(64, layout.sceneW - pad * 2 - layout.safe.l - layout.safe.r)
   const h = Math.max(64, layout.sceneH - pad * 2 - layout.safe.t - layout.safe.b)
   return { x, y, w, h, cx: x + w / 2, bottom: y + h }
-}
-
-export function clampScroll(scroll: number, max: number): number {
-  return Math.min(Math.max(0, scroll), Math.max(0, max))
 }
 
 export function drawIntro(ctx: CanvasRenderingContext2D, hits: Hit[], layout: ViewLayout, state: ScreenState): number {
@@ -207,27 +203,34 @@ export function drawDevice(ctx: CanvasRenderingContext2D, hits: Hit[], layout: V
 }
 
 export function drawPicker(ctx: CanvasRenderingContext2D, hits: Hit[], layout: ViewLayout, state: ScreenState): number {
-  const s = stage(layout)
-  const gap = 8
-  const portrait = layout.portrait
-  const fourFit = s.w >= 4 * TAP_PT + 3 * gap + 88
-  const cols = portrait || !fourFit ? 2 : 4
-  const short = s.h < 400
-  const headerH = cols === 4 ? TAP_PT : portrait ? 56 : 48
-  const innerW = s.w - (cols === 4 ? 88 : 0)
-  const cardW = Math.max(TAP_PT, cols === 4 ? (innerW - gap * (cols - 1)) / cols : (s.w - gap) / 2)
-  const cardH = Math.max(TAP_PT, portrait ? 88 : TAP_PT)
-  let content = 0
-  GAMES.forEach(() => {
-    content += cols === 4 ? cardH + 12 : headerH + 8 + Math.ceil(4 / cols) * (cardH + gap) + 10
-  })
-  const showLead = !short
-  const titleBlock = HEAD_PT + (showLead ? TEXT_PT + 16 : 8)
-  const viewTop = s.y + titleBlock
-  const viewBot = s.bottom - TAP_PT - 8
-  const viewHgt = Math.max(80, viewBot - viewTop)
-  const maxScroll = Math.max(0, content - viewHgt)
-  const scroll = clampScroll(state.scroll, maxScroll)
+  const short = layout.sceneH < 420
+  const s = stage(layout, short ? 8 : 12)
+  const titleH = HEAD_PT + (short ? 6 : 10)
+  let gap = short ? 6 : 8
+  let footH = TAP_PT
+  let cardH = TAP_PT
+  const canFour = !layout.portrait && s.w >= 4 * MIN_HIT + 3 * 6 + 64
+  const cols = canFour ? 4 : 2
+  const iconW = cols === 4 ? Math.min(72, Math.max(56, s.w * 0.1)) : 0
+
+  const bodyH = (h: number, g: number): number => {
+    if (cols === 4) return GAMES.length * h + (GAMES.length - 1) * g
+    const header = Math.max(MIN_HIT, Math.min(48, h))
+    const rows = Math.ceil(4 / cols)
+    const per = header + 4 + rows * h + (rows - 1) * g
+    return GAMES.length * per + (GAMES.length - 1) * g
+  }
+
+  while (titleH + bodyH(cardH, gap) + 8 + footH > s.h) {
+    if (cardH > MIN_HIT) cardH -= 1
+    else if (footH > MIN_HIT) footH -= 1
+    else if (gap > 4) gap -= 1
+    else break
+  }
+
+  const headerH = cols === 4 ? cardH : Math.max(MIN_HIT, Math.min(48, cardH))
+  const innerW = s.w - (cols === 4 ? iconW + 8 : 0)
+  const cardW = Math.max(MIN_HIT, cols === 4 ? (innerW - gap * (cols - 1)) / cols : (s.w - gap) / 2)
 
   ctx.save()
   ctx.beginPath()
@@ -235,53 +238,38 @@ export function drawPicker(ctx: CanvasRenderingContext2D, hits: Hit[], layout: V
   ctx.clip()
 
   drawText(ctx, state.copy.chooseLevel, s.cx, s.y + HEAD_PT / 2, HEAD_PT, 'center', INK, 800)
-  if (showLead) {
-    drawText(
-      ctx,
-      state.device === 'computer' ? state.copy.practiceKey : state.copy.practicePad,
-      s.cx,
-      s.y + HEAD_PT + 12,
-      TEXT_PT,
-      'center',
-      MUTED,
-      600,
-    )
-  }
-
-  ctx.save()
-  ctx.beginPath()
-  ctx.rect(layout.sceneX, viewTop, layout.sceneW, viewHgt)
-  ctx.clip()
 
   ensureMarks()
-  let y = viewTop - scroll
-  GAMES.forEach((mini) => {
+  let y = s.y + titleH
+  GAMES.forEach((mini, index) => {
     const label = mini.id === 'hen' ? state.copy.hen : state.copy.car
+    const art = mini.id === 'hen' ? markHen : markCar
+    const last = index === GAMES.length - 1
     if (cols === 4) {
-      fillRound(ctx, s.x, y, 80, cardH, 16, CREAM, LINE, 3)
-      ctx.drawImage(mini.id === 'hen' ? markHen : markCar, s.x + 8, y + 6, 64, 40)
-      drawText(ctx, label, s.x + 40, y + cardH - 12, TEXT_PT, 'center', INK, 700)
-      drawLevelRow(ctx, hits, state, mini, s.x + 88, y, cardW, cardH, cols, gap)
-      y += cardH + 12
+      fillRound(ctx, s.x, y, iconW, cardH, 14, CREAM, LINE, 3)
+      const artH = Math.min(cardH - 22, iconW * 0.55)
+      const artW = artH * (220 / 160)
+      ctx.drawImage(art, s.x + (iconW - artW) / 2, y + 4, artW, artH)
+      drawText(ctx, label, s.x + iconW / 2, y + cardH - 11, TEXT_PT, 'center', INK, 700)
+      drawLevelRow(ctx, hits, state, mini, s.x + iconW + 8, y, cardW, cardH, cols, gap, cardH < 56)
+      y += cardH + (last ? 0 : gap)
     } else {
-      fillRound(ctx, s.x, y, s.w, headerH, 16, CREAM, LINE, 3)
-      ctx.drawImage(mini.id === 'hen' ? markHen : markCar, s.x + 8, y + 8, 48, 34)
-      drawText(ctx, label, s.x + 64, y + headerH / 2, TEXT_PT, 'left', INK, 700)
-      y += headerH + 8
-      y += drawLevelRow(ctx, hits, state, mini, s.x, y, cardW, cardH, cols, gap)
-      y += 8
+      fillRound(ctx, s.x, y, s.w, headerH, 14, CREAM, LINE, 3)
+      const artH = Math.min(headerH - 8, 34)
+      ctx.drawImage(art, s.x + 8, y + (headerH - artH) / 2, artH * (220 / 160), artH)
+      drawText(ctx, label, s.x + 12 + artH * (220 / 160), y + headerH / 2, TEXT_PT, 'left', INK, 700)
+      y += headerH + 4
+      y += drawLevelRow(ctx, hits, state, mini, s.x, y, cardW, cardH, cols, gap, cardH < 56)
+      if (!last) y += gap
     }
   })
-  ctx.restore()
 
-  ctx.fillStyle = layout.fillView ? PEACH : SAND
-  ctx.fillRect(layout.sceneX, viewBot, layout.sceneW, layout.sceneY + layout.sceneH - viewBot)
-  const footY = s.bottom - TAP_PT
+  const footY = s.bottom - footH
   const footW = (s.w - 8) / 2
-  drawButton(ctx, hits, 'back-device', s.x, footY, footW, TAP_PT, state.copy.switchDevice, undefined, state.pressed === 'back-device')
-  drawButton(ctx, hits, 'open-settings', s.x + footW + 8, footY, footW, TAP_PT, state.copy.settings, undefined, state.pressed === 'open-settings')
+  drawButton(ctx, hits, 'back-device', s.x, footY, footW, footH, state.copy.switchDevice, undefined, state.pressed === 'back-device', false, MIN_HIT)
+  drawButton(ctx, hits, 'open-settings', s.x + footW + 8, footY, footW, footH, state.copy.settings, undefined, state.pressed === 'open-settings', false, MIN_HIT)
   ctx.restore()
-  return maxScroll
+  return 0
 }
 
 function drawLevelRow(
@@ -295,6 +283,7 @@ function drawLevelRow(
   cardH: number,
   cols: number,
   gap: number,
+  compact = false,
 ): number {
   mini.levels.forEach((level, i) => {
     const col = i % cols
@@ -304,12 +293,19 @@ function drawLevelRow(
     const id = `level-${mini.id}-${level.id}`
     const last = state.lastGame === mini.id && state.lastLevel === level.id
     const title = mini.id === 'hen' ? state.copy.henLevels[level.id - 1] : state.copy.carLevels[level.id - 1]
-    fillRound(ctx, bx, by, cardW, cardH, 14, CREAM, last ? ACCENT : LINE, last ? 4 : 3)
-    drawText(ctx, `${state.copy.levelWord} ${level.id}`, bx + cardW / 2, by + cardH * 0.32, TEXT_PT, 'center', MUTED, 600)
-    drawText(ctx, title, bx + cardW / 2, by + cardH * 0.62, TEXT_PT + 2, 'center', INK, 750)
-    addHit(hits, { id, x: bx, y: by, w: Math.max(TAP_PT, cardW), h: Math.max(TAP_PT, cardH), fontPt: TEXT_PT + 2 })
+    const bw = Math.max(MIN_HIT, cardW)
+    const bh = Math.max(MIN_HIT, cardH)
+    fillRound(ctx, bx, by, bw, bh, 12, CREAM, last ? ACCENT : LINE, last ? 4 : 3)
+    if (compact) {
+      drawText(ctx, `${level.id}  ${title}`, bx + bw / 2, by + bh / 2, TEXT_PT, 'center', INK, 750)
+    } else {
+      drawText(ctx, `${state.copy.levelWord} ${level.id}`, bx + bw / 2, by + bh * 0.32, TEXT_PT, 'center', MUTED, 600)
+      drawText(ctx, title, bx + bw / 2, by + bh * 0.62, TEXT_PT, 'center', INK, 750)
+    }
+    addHit(hits, { id, x: bx, y: by, w: bw, h: bh, fontPt: TEXT_PT })
   })
-  return Math.ceil(mini.levels.length / cols) * (cardH + gap)
+  const rows = Math.ceil(mini.levels.length / cols)
+  return rows * cardH + Math.max(0, rows - 1) * gap
 }
 
 function panelBox(layout: ViewLayout, maxW: number, wantH: number): { x: number; y: number; w: number; h: number } {

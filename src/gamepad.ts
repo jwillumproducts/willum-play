@@ -11,7 +11,6 @@ const INSET = 6
 const PAUSE_HIT = 44
 const PAUSE_VIS = 36
 
-const DIRS: Action[] = ['moveLeft', 'moveRight', 'moveUp', 'moveDown']
 const FACES: Action[] = ['jump', 'brake', 'interact']
 
 export interface PadButton {
@@ -24,114 +23,123 @@ export interface PadButton {
   round: boolean
 }
 
-export function padNeed(actions: readonly Action[]): PadNeed {
-  const set = new Set(actions)
-  const hasLR = set.has('moveLeft') || set.has('moveRight')
-  const hasUD = set.has('moveUp') || set.has('moveDown')
-  const faces = FACES.filter((action) => set.has(action))
-  let left = 0
-  if (hasUD) left = INSET * 2 + DIR_HIT + 2 * (DIR_VIS + GAP)
-  else if (hasLR) left = INSET * 2 + 2 * DIR_HIT + GAP
-  let right = 0
-  if (faces.length >= 2) right = INSET * 2 + 2 * ACT_HIT + 8
-  else if (faces.length === 1) right = INSET * 2 + ACT_HIT
-  const deck = Math.max(left, right, hasUD ? left : hasLR || faces.length ? DIR_HIT + INSET * 2 : 0)
-  return { left, right, deck }
+export interface PadRect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface PadSlots {
+  originX: number
+  originY: number
+  pause: { cx: number; cy: number }
+  action: { cx: number; cy: number }
+  dpad: PadRect
+  actionRect: PadRect
+}
+
+export function maxPadNeed(): PadNeed {
+  const dpad = INSET * 2 + DIR_HIT + 2 * (DIR_VIS + GAP)
+  const action = INSET * 2 + ACT_HIT
+  const bar = Math.max(dpad, action)
+  return { left: bar, right: bar, deck: bar }
+}
+
+export function padSlots(layout: ViewLayout): PadSlots {
+  const insetL = INSET + layout.safe.l
+  const insetR = INSET + layout.safe.r
+  const insetB = INSET + layout.safe.b
+  const insetT = INSET + layout.safe.t
+  const step = DIR_VIS + GAP
+  const pause = { cx: insetL + PAUSE_HIT / 2, cy: insetT + PAUSE_HIT / 2 }
+
+  let originX = insetL + DIR_HIT + step / 2
+  let originY = layout.viewH - insetB - DIR_HIT - step / 2
+  if (layout.mode === 'sidebars') {
+    originX = clamp(layout.leftBar / 2, DIR_HIT / 2 + step, Math.max(DIR_HIT / 2 + step, layout.sceneX - step - DIR_HIT / 2))
+    originY = layout.viewH - insetB - DIR_HIT - step / 2
+  } else if (layout.mode === 'deck') {
+    originY = layout.sceneY + layout.sceneH + Math.max(DIR_HIT + step / 2, (layout.deckH - insetB) / 2)
+  }
+  originX = clamp(originX, DIR_HIT / 2 + step, layout.viewW - DIR_HIT / 2 - step)
+  originY = clamp(originY, DIR_HIT / 2 + step, layout.viewH - DIR_HIT / 2 - step)
+
+  const leftX = originX - step
+  const rightX = originX + step
+  const upY = originY - step
+  const downY = originY + step
+  const dpad: PadRect = {
+    x: leftX - DIR_HIT / 2,
+    y: upY - DIR_HIT / 2,
+    w: rightX - leftX + DIR_HIT,
+    h: downY - upY + DIR_HIT,
+  }
+
+  let ax = layout.viewW - insetR - ACT_HIT / 2
+  let ay = layout.viewH - insetB - ACT_HIT / 2
+  if (layout.mode === 'sidebars') {
+    ax = clampBar(layout.sceneX + layout.sceneW + layout.rightBar / 2, ACT_HIT, layout, 'right')
+    ay = layout.viewH - insetB - ACT_HIT / 2
+  } else if (layout.mode === 'deck') {
+    ay = originY
+  }
+  ax = clamp(ax, ACT_HIT / 2, layout.viewW - ACT_HIT / 2)
+  ay = clamp(ay, ACT_HIT / 2, layout.viewH - ACT_HIT / 2)
+
+  return {
+    originX,
+    originY,
+    pause,
+    action: { cx: ax, cy: ay },
+    dpad,
+    actionRect: { x: ax - ACT_HIT / 2, y: ay - ACT_HIT / 2, w: ACT_HIT, h: ACT_HIT },
+  }
 }
 
 export function layoutPad(layout: ViewLayout, actions: readonly Action[]): PadButton[] {
   const set = new Set(actions)
-  const dirs = DIRS.filter((action) => set.has(action))
-  const faces = FACES.filter((action) => set.has(action))
-  const safe = layout.safe
-  const insetL = INSET + safe.l
-  const insetR = INSET + safe.r
-  const insetB = INSET + safe.b
-  const insetT = INSET + safe.t
-  const buttons: PadButton[] = []
-  const hasUD = dirs.includes('moveUp') || dirs.includes('moveDown')
-  const hasLR = dirs.includes('moveLeft') || dirs.includes('moveRight')
-
-  buttons.push({
-    id: 'pause',
-    action: 'pause',
-    cx: insetL + PAUSE_HIT / 2,
-    cy: insetT + PAUSE_HIT / 2,
-    hit: PAUSE_HIT,
-    vis: PAUSE_VIS,
-    round: false,
-  })
-
-  let originX = insetL + (hasUD ? DIR_HIT + (DIR_VIS + GAP) / 2 : DIR_HIT + GAP / 2)
-  let originY = layout.viewH - insetB - (hasUD ? DIR_HIT + (DIR_VIS + GAP) / 2 : DIR_HIT / 2)
-
-  if (layout.mode === 'sidebars') {
-    originX = Math.min(layout.leftBar / 2, layout.sceneX - (hasUD ? DIR_VIS + GAP + DIR_HIT / 2 : DIR_HIT + GAP / 2))
-    originY = layout.viewH - insetB - (hasUD ? DIR_HIT + (DIR_VIS + GAP) / 2 : DIR_HIT / 2)
-  } else if (layout.mode === 'deck') {
-    originX = insetL + (hasUD ? DIR_HIT + (DIR_VIS + GAP) / 2 : DIR_HIT + GAP / 2)
-    originY = layout.sceneY + layout.sceneH + Math.max(DIR_HIT, (layout.deckH - insetB) / 2)
-  }
-
-  originX = clamp(originX, DIR_HIT / 2, layout.viewW - DIR_HIT / 2)
-  originY = clamp(originY, DIR_HIT / 2, layout.viewH - DIR_HIT / 2)
-
-  const placeDir = (action: Action, dx: number, dy: number): void => {
-    const cx = clampBar(
-      originX + dx * (DIR_VIS + GAP),
-      DIR_HIT,
-      layout,
-      'left',
-    )
-    const cy = clamp(originY + dy * (DIR_VIS + GAP), DIR_HIT / 2, layout.viewH - DIR_HIT / 2)
+  const slots = padSlots(layout)
+  const step = DIR_VIS + GAP
+  const buttons: PadButton[] = [
+    {
+      id: 'pause',
+      action: 'pause',
+      cx: slots.pause.cx,
+      cy: slots.pause.cy,
+      hit: PAUSE_HIT,
+      vis: PAUSE_VIS,
+      round: false,
+    },
+  ]
+  const dirAt = (action: Action, dx: number, dy: number): void => {
     buttons.push({
       id: action,
       action,
-      cx,
-      cy,
+      cx: slots.originX + dx * step,
+      cy: slots.originY + dy * step,
       hit: DIR_HIT,
       vis: DIR_VIS,
       round: false,
     })
   }
+  if (set.has('moveLeft')) dirAt('moveLeft', -1, 0)
+  if (set.has('moveRight')) dirAt('moveRight', 1, 0)
+  if (set.has('moveUp')) dirAt('moveUp', 0, -1)
+  if (set.has('moveDown')) dirAt('moveDown', 0, 1)
 
-  if (hasLR) {
-    if (hasUD) {
-      placeDir('moveLeft', -1, 0)
-      placeDir('moveRight', 1, 0)
-    } else {
-      const spread = (DIR_HIT + GAP) / 2 / (DIR_VIS + GAP)
-      placeDir('moveLeft', -spread, 0)
-      placeDir('moveRight', spread, 0)
-    }
-  }
-  if (dirs.includes('moveUp')) placeDir('moveUp', 0, -1)
-  if (dirs.includes('moveDown')) placeDir('moveDown', 0, 1)
-
-  let ax = layout.viewW - insetR - ACT_HIT / 2
-  let ay = layout.viewH - insetB - ACT_HIT / 2
-  if (layout.mode === 'sidebars') {
-    ax = layout.sceneX + layout.sceneW + Math.max(ACT_HIT / 2 + INSET, layout.rightBar / 2)
-    ay = layout.viewH - insetB - ACT_HIT / 2
-  } else if (layout.mode === 'deck') {
-    ay = originY
-  }
-  ax = clampBar(ax, ACT_HIT, layout, 'right')
-  ay = clamp(ay, ACT_HIT / 2, layout.viewH - ACT_HIT / 2)
-
-  faces.forEach((action, i) => {
-    const extra = faces.length > 1 ? (i === 0 ? -(ACT_HIT + 8) : 0) : 0
+  const face = FACES.find((action) => set.has(action))
+  if (face) {
     buttons.push({
-      id: action,
-      action,
-      cx: clampBar(ax + extra, ACT_HIT, layout, 'right'),
-      cy: ay,
+      id: face,
+      action: face,
+      cx: slots.action.cx,
+      cy: slots.action.cy,
       hit: ACT_HIT,
       vis: ACT_VIS,
       round: true,
     })
-  })
-
+  }
   return buttons.map((button) => clampHit(button, layout))
 }
 

@@ -113,10 +113,10 @@ export function computeLayout(fillView = false, need: PadNeed = { left: 0, right
   const ah = Math.max(1, box.height - safe.t - safe.b - edge * 2)
   const contain = Math.min(aw / SCENE_W, ah / SCENE_H)
   const minScale = contain * (1 - SHRINK_MAX)
-  const needL = Math.max(0, need.left)
-  const needR = Math.max(0, need.right)
-  const needSum = needL + needR
-  const needDeck = Math.max(0, need.deck)
+  const bar = Math.max(0, need.left, need.right)
+  const needL = bar
+  const needSum = bar * 2
+  const needDeck = Math.max(0, need.deck, bar)
 
   let scale = contain
   let mode: PadMode = 'overlay'
@@ -157,7 +157,7 @@ export function computeLayout(fillView = false, need: PadNeed = { left: 0, right
   let sceneX = x0 + extraX / 2
   let sceneY = y0 + extraY / 2
   if (mode === 'sidebars') {
-    const rest = Math.max(0, extraX - needL - needR)
+    const rest = Math.max(0, extraX - needSum)
     sceneX = x0 + needL + rest / 2
   } else if (mode === 'deck') {
     sceneY = y0
