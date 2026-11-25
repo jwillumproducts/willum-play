@@ -11,11 +11,9 @@ const BODY_LIFT = 70
 const HIT_R = 50
 
 export class Game {
-  private readonly ctx: CanvasRenderingContext2D
   private readonly input: InputManager
   private readonly props: LiveProp[]
   private readonly chicken: Chicken
-  private raf = 0
   private last = 0
   private time = 0
   private stepTimer = 0.2
@@ -26,8 +24,10 @@ export class Game {
   private nudgeTime = 0
   private brakeTime = 0
 
+  camX = 0
+  camY = 0
+
   constructor(
-    private readonly canvas: HTMLCanvasElement,
     private readonly level: LevelConfig,
     private readonly gameId: GameId,
     private readonly sound: Sound,
@@ -35,9 +35,6 @@ export class Game {
     usePad = false,
     onMenu: () => void = () => {},
   ) {
-    const ctx = canvas.getContext('2d')
-    if (!ctx) throw new Error('Canvas er ikke tilgængelig')
-    this.ctx = ctx
     this.input = new InputManager(level.actions, usePad, onMenu)
     this.props = sceneryFor(level.camera, gameId).map((prop) => ({
       ...prop,
@@ -64,21 +61,15 @@ export class Game {
       ripple: 0,
       braking: false,
     }
-    this.onResize = this.onResize.bind(this)
   }
 
   start(): void {
-    this.fit()
-    window.addEventListener('resize', this.onResize)
     this.running = true
     this.last = performance.now()
-    this.raf = requestAnimationFrame(this.frame)
   }
 
   stop(): void {
     this.running = false
-    cancelAnimationFrame(this.raf)
-    window.removeEventListener('resize', this.onResize)
     this.input.dispose()
   }
 
@@ -96,32 +87,53 @@ export class Game {
     this.input.releasePointer(pointerId)
   }
 
-  private onResize(): void {
-    this.fit()
-  }
-
-  private fit(): void {
-    const dpr = Math.min(2, window.devicePixelRatio || 1)
-    this.canvas.width = VIEW_W * dpr
-    this.canvas.height = VIEW_H * dpr
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  }
-
-  private frame = (now: number): void => {
+  step(now: number): void {
     if (!this.running) return
     const dt = Math.min(0.033, (now - this.last) / 1000)
     this.last = now
     this.input.poll()
     if (!this.paused) this.update(dt)
     this.onKeys(this.input.activeCaps())
-    render(this.ctx, {
+  }
+
+  draw(ctx: CanvasRenderingContext2D): void {
+    ctx.fillStyle = '#f8e8c8'
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H)
+    ctx.save()
+    ctx.translate(-this.camX, -this.camY)
+    render(ctx, {
       game: this.gameId,
       level: this.level,
       time: this.time,
       chicken: this.chicken,
       props: this.props,
     })
-    this.raf = requestAnimationFrame(this.frame)
+    ctx.restore()
+  }
+
+  ensureX(minSceneX: number): void {
+    if (this.chicken.x < minSceneX) this.chicken.x = minSceneX
+  }
+
+  keepClear(leftCss: number, rightCss: number, bottomCss: number, scale: number): void {
+    if (scale <= 0) return
+    const left = leftCss / scale
+    const right = rightCss / scale
+    const bottom = bottomCss / scale
+    const minX = left + 48
+    const maxX = VIEW_W - right - 48
+    const sx = this.chicken.x - this.camX
+    if (sx < minX) this.camX = this.chicken.x - minX
+    else if (sx > maxX) this.camX = this.chicken.x - maxX
+    this.camX = Math.max(0, Math.min(this.camX, VIEW_W * 0.35))
+    if (this.level.camera === 'top') {
+      const maxY = VIEW_H - bottom - 48
+      const sy = this.chicken.y - this.camY
+      if (sy > maxY) this.camY = this.chicken.y - maxY
+      this.camY = Math.max(0, this.camY)
+    } else {
+      this.camY = 0
+    }
   }
 
   private update(dt: number): void {
@@ -197,7 +209,7 @@ export class Game {
       chicken.onGround = true
     }
 
-    this.step(dt, chicken.onGround && dir !== 0)
+    this.walkCycle(dt, chicken.onGround && dir !== 0)
   }
 
   private updateTop(dt: number, edges: Action[]): void {
@@ -221,7 +233,7 @@ export class Game {
       this.sound.peck()
     }
 
-    this.step(dt, moving)
+    this.walkCycle(dt, moving)
   }
 
   private slideTop(dt: number, braking: boolean): boolean {
@@ -266,7 +278,7 @@ export class Game {
     return braking
   }
 
-  private step(dt: number, stepping: boolean): void {
+  private walkCycle(dt: number, stepping: boolean): void {
     this.chicken.moving = stepping
     if (!stepping) {
       this.stepTimer = 0.18

@@ -41,6 +41,10 @@ export class Sound {
     this.noise(0.045, 0.035, 420)
   }
 
+  tap(): void {
+    this.tone(640, 0.05, 0.035)
+  }
+
   jump(): void {
     this.sweep(280, 520, 0.16, 0.05)
   }
