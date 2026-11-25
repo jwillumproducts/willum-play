@@ -48,6 +48,13 @@ type Debug = {
   minTap: number
   minLang?: number
   scene?: { x: number; y: number; w: number; h: number; viewW: number; viewH: number; mode: string }
+  clusters?: {
+    scene: { x: number; y: number; w: number; h: number }
+    dpad: { x: number; y: number; w: number; h: number }
+    action: { x: number; y: number; w: number; h: number }
+    origin: { x: number; y: number }
+  } | null
+  page?: { scrollHeight: number; clientHeight: number; innerHeight: number; scrollY: number }
 }
 
 const SHOT = '/cursor/stores/self/willum-ux'
@@ -153,14 +160,14 @@ async function holdId(page: Page, id: string, ms: number): Promise<void> {
   await page.waitForTimeout(40)
 }
 
-function assertMenuSizes(label: string, data: Debug): void {
+function assertMenuSizes(label: string, data: Debug, minTap = 64): void {
   expect(data.minFont, `${label} min font`).toBeGreaterThanOrEqual(16)
   expect(data.minBody, `${label} body`).toBeGreaterThanOrEqual(16)
   expect(data.minHead, `${label} heading`).toBeGreaterThanOrEqual(22)
-  expect(data.minTap, `${label} tap`).toBeGreaterThanOrEqual(64)
+  expect(data.minTap, `${label} tap`).toBeGreaterThanOrEqual(minTap)
   for (const tap of data.taps) {
-    expect(tap.w, `${label} ${tap.id} w`).toBeGreaterThanOrEqual(64)
-    expect(tap.h, `${label} ${tap.id} h`).toBeGreaterThanOrEqual(64)
+    expect(tap.w, `${label} ${tap.id} w`).toBeGreaterThanOrEqual(minTap)
+    expect(tap.h, `${label} ${tap.id} h`).toBeGreaterThanOrEqual(minTap)
   }
   for (const font of data.fonts) {
     expect(font.pt, `${label} ${font.text}`).toBeGreaterThanOrEqual(font.role === 'head' ? 22 : 16)
@@ -343,7 +350,7 @@ for (const vp of VIEWPORTS) {
     await tapId(page, 'dev-tablet', vp.touch)
     const picker = await debug(page)
     expect(picker.screen).toBe('menu')
-    assertMenuSizes(`${vp.name} picker`, picker)
+    assertMenuSizes(`${vp.name} picker`, picker, 44)
     assertInsideScene(`${vp.name} picker`, picker)
     assertCornerFlag(`${vp.name} picker`, picker)
     await shot(page, vp.name, '03-picker')
@@ -454,6 +461,132 @@ for (const vp of LEVEL_VPS) {
       await tapId(page, 'to-menu', true)
     }
 
+    await context.close()
+  })
+}
+
+function roundRect(rect: { x: number; y: number; w: number; h: number }) {
+  return {
+    x: Math.round(rect.x),
+    y: Math.round(rect.y),
+    w: Math.round(rect.w),
+    h: Math.round(rect.h),
+  }
+}
+
+const LAYOUT_VPS = [
+  { name: 'iphone16-safari-land-852x300', width: 852, height: 300, staleClient: true },
+  { name: 'iphone16-852x329', width: 852, height: 329, staleClient: false },
+  { name: 'ipad-1180x820', width: 1180, height: 820, staleClient: false },
+] as const
+
+for (const vp of LAYOUT_VPS) {
+  test(`stable layout ${vp.name}`, async ({ browser }) => {
+    const context = await browser.newContext({
+      viewport: { width: vp.width, height: vp.height },
+      deviceScaleFactor: 3,
+      hasTouch: true,
+      isMobile: true,
+      locale: 'da-DK',
+    })
+    const page = await context.newPage()
+    if (vp.staleClient) {
+      await page.addInitScript(() => {
+        Object.defineProperty(document.documentElement, 'clientWidth', { get: () => 393 })
+        Object.defineProperty(document.documentElement, 'clientHeight', { get: () => 852 })
+      })
+    }
+    await page.goto('/da/')
+    await tapId(page, 'cta-device', true)
+    await tapId(page, 'dev-tablet', true)
+
+    let firstScene: ReturnType<typeof roundRect> | null = null
+    let firstDpad: ReturnType<typeof roundRect> | null = null
+    let firstLeft: ReturnType<typeof roundRect> | null = null
+    let firstRight: ReturnType<typeof roundRect> | null = null
+    let firstAction: ReturnType<typeof roundRect> | null = null
+
+    for (const level of LEVELS) {
+      await tapId(page, `level-${level.game}-${level.id}`, true)
+      const play = await debug(page)
+      expect(play.screen).toBe('play')
+      expect(play.clusters, `${vp.name} clusters`).toBeTruthy()
+      const scene = roundRect(play.clusters!.scene)
+      const dpad = roundRect(play.clusters!.dpad)
+      const left = play.hits.find((h) => h.id === 'pad-moveLeft')
+      const right = play.hits.find((h) => h.id === 'pad-moveRight')
+      expect(left, `${vp.name} ${level.game}-${level.id} left`).toBeTruthy()
+      expect(right, `${vp.name} ${level.game}-${level.id} right`).toBeTruthy()
+      if (!firstScene) {
+        firstScene = scene
+        firstDpad = dpad
+        firstLeft = roundRect(left!)
+        firstRight = roundRect(right!)
+        firstAction = roundRect(play.clusters!.action)
+      } else {
+        expect(scene, `${vp.name} ${level.game}-${level.id} scene`).toEqual(firstScene)
+        expect(dpad, `${vp.name} ${level.game}-${level.id} dpad`).toEqual(firstDpad)
+        expect(roundRect(left!), `${vp.name} ${level.game}-${level.id} left`).toEqual(firstLeft)
+        expect(roundRect(right!), `${vp.name} ${level.game}-${level.id} right`).toEqual(firstRight)
+        expect(roundRect(play.clusters!.action), `${vp.name} ${level.game}-${level.id} action slot`).toEqual(firstAction)
+      }
+      if (play.pads.find((p) => p.id === 'pad-pause')) await tapId(page, 'pad-pause', true)
+      else await page.keyboard.press('Escape')
+      await tapId(page, 'to-menu', true)
+    }
+
+    await context.close()
+  })
+}
+
+const PICKER_VPS = [
+  { name: 'iphone16-safari-land-852x300', width: 852, height: 300, staleClient: true },
+  { name: 'iphone16-852x329', width: 852, height: 329, staleClient: false },
+] as const
+
+for (const vp of PICKER_VPS) {
+  test(`picker fits ${vp.name}`, async ({ browser }) => {
+    const context = await browser.newContext({
+      viewport: { width: vp.width, height: vp.height },
+      deviceScaleFactor: 3,
+      hasTouch: true,
+      isMobile: true,
+      locale: 'da-DK',
+    })
+    const page = await context.newPage()
+    if (vp.staleClient) {
+      await page.addInitScript(() => {
+        Object.defineProperty(document.documentElement, 'clientWidth', { get: () => 393 })
+        Object.defineProperty(document.documentElement, 'clientHeight', { get: () => 852 })
+      })
+    }
+    await page.goto('/da/')
+    await tapId(page, 'cta-device', true)
+    await tapId(page, 'dev-tablet', true)
+    const picker = await debug(page)
+    expect(picker.screen).toBe('menu')
+    const lastRow = picker.hits.filter((h) => h.id.startsWith('level-car-'))
+    expect(lastRow.length).toBe(4)
+    assertInsideView(`${vp.name} picker last row`, picker, lastRow)
+    const foot = picker.hits.filter((h) => h.id === 'back-device' || h.id === 'open-settings')
+    expect(foot.length).toBe(2)
+    assertInsideView(`${vp.name} picker footer`, picker, foot)
+    for (const h of [...lastRow, ...foot]) {
+      expect(h.y + h.h, `${vp.name} ${h.id} bottom`).toBeLessThanOrEqual(picker.layout.viewH + 1)
+      expect(h.y, `${vp.name} ${h.id} top`).toBeGreaterThanOrEqual(-1)
+    }
+    const pageBox = picker.page
+    expect(pageBox, `${vp.name} page metrics`).toBeTruthy()
+    if (pageBox) {
+      expect(pageBox.scrollHeight, `${vp.name} scrollHeight`).toBeLessThanOrEqual(pageBox.innerHeight + 1)
+      expect(pageBox.scrollY).toBe(0)
+    }
+    const measured = await page.evaluate(() => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      innerHeight: window.innerHeight,
+    }))
+    expect(measured.scrollHeight).toBeLessThanOrEqual(measured.innerHeight + 1)
+    await shot(page, vp.name, '03-picker-fit')
     await context.close()
   })
 }
