@@ -3,7 +3,7 @@ import { Sound } from './audio'
 import { BRAND, COPY, fill, isLocale, type Copy, type Locale } from './copy'
 import { Game } from './game'
 import { gameById } from './games'
-import { drawPad, layoutPad, padAt, type PadButton } from './gamepad'
+import { drawPad, layoutPad, padAt, padNeed, type PadButton } from './gamepad'
 import { detectLocale, localeFromPath, localePath, publicUrl, rememberLocale } from './locale'
 import { samplePads, type PadSnapshot } from './pads'
 import {
@@ -18,11 +18,12 @@ import {
 } from './screens'
 import { loadSave, writeSave, type SaveData } from './storage'
 import type { Action, GameId, LevelId } from './types'
-import { fontMarks, hitAt, resetFontMarks, type Hit } from './ui'
+import { drawCornerFlag, drawLangPopup, fontMarks, hitAt, resetFontMarks, type Hit } from './ui'
 import { computeLayout, watchView, type ViewLayout } from './viewport'
 
-const root = document.querySelector<HTMLElement>('#app')
-if (!root) throw new Error('Mangler #app')
+const mounted = document.querySelector<HTMLElement>('#app')
+if (!mounted) throw new Error('Mangler #app')
+const root: HTMLElement = mounted
 
 const canvas = document.createElement('canvas')
 canvas.id = 'stage'
@@ -42,9 +43,10 @@ let save = loadSave()
 sound.setMuted(save.muted)
 
 type Route = 'intro' | 'device' | 'menu' | 'play'
-type Overlay = 'pause' | 'settings' | 'pad' | null
+type Overlay = 'pause' | 'settings' | 'pad' | 'lang' | null
 let route: Route = 'intro'
 let overlay: Overlay = null
+let overlayBack: Overlay = null
 let locale: Locale = 'da'
 let game: Game | null = null
 let layout: ViewLayout = computeLayout()
@@ -95,12 +97,14 @@ function startPlay(): void {
   stopGame()
   const mini = gameById(save.game)
   const level = mini.levels.find((item) => item.id === save.level) ?? mini.levels[0]
-  sound.use({ peck: publicUrl(mini.sounds.peck), peep: mini.sounds.peep ? publicUrl(mini.sounds.peep) : undefined })
+  sound.use({
+    peck: publicClips(mini.sounds.peck),
+    peep: mini.sounds.peep ? publicClips(mini.sounds.peep) : undefined,
+  })
   game = new Game(level, mini.id, sound, (caps) => {
     heldCaps = caps
   }, usingPad(), () => togglePause())
   game.start()
-  if (layout.mode === 'overlay' && usingTouch()) game.ensureX(220 / Math.max(0.2, layout.scale))
   if (layout.phone) void lockLandscape()
 }
 
@@ -155,15 +159,30 @@ function padMessage(): string {
   return c.padLogo
 }
 
+function publicClips(value: string | readonly string[]): string | string[] {
+  if (typeof value === 'string') return publicUrl(value)
+  return value.map((item) => publicUrl(item))
+}
+
+function currentActions(): Action[] {
+  if (route !== 'play') return []
+  const level = gameById(save.game).levels.find((item) => item.id === save.level)
+  return level?.actions ?? []
+}
+
 function sizeCanvas(): void {
-  layout = computeLayout(route !== 'play')
-  const { viewW, viewH, dpr, left, top } = layout
-  canvas.style.left = `${left}px`
-  canvas.style.top = `${top}px`
-  canvas.style.width = `${viewW}px`
-  canvas.style.height = `${viewH}px`
-  const pw = Math.max(1, Math.round(viewW * dpr))
-  const ph = Math.max(1, Math.round(viewH * dpr))
+  const need = route === 'play' && usingTouch() ? padNeed(currentActions()) : { left: 0, right: 0, deck: 0 }
+  layout = computeLayout(route !== 'play', need)
+  root.style.left = `${layout.left}px`
+  root.style.top = `${layout.top}px`
+  root.style.width = `${layout.viewW}px`
+  root.style.height = `${layout.viewH}px`
+  canvas.style.left = '0'
+  canvas.style.top = '0'
+  canvas.style.width = '100%'
+  canvas.style.height = '100%'
+  const pw = Math.max(1, Math.round(layout.viewW * layout.dpr))
+  const ph = Math.max(1, Math.round(layout.viewH * layout.dpr))
   if (canvas.width !== pw) canvas.width = pw
   if (canvas.height !== ph) canvas.height = ph
 }
@@ -186,12 +205,8 @@ function paint(now: number): void {
     game.step(now)
     if (overlay) game.setPaused(true)
     else game.setPaused(needsRotate())
-    if (layout.mode === 'overlay' && usingTouch() && !needsRotate()) {
-      game.keepClear(200, 200, 200, layout.scale)
-    } else {
-      game.camX = 0
-      game.camY = 0
-    }
+    game.camX = 0
+    game.camY = 0
     game.draw(ctx)
   }
   ctx.restore()
@@ -202,9 +217,7 @@ function paint(now: number): void {
   else if (route === 'menu') maxScroll = drawPicker(ctx, hits, layout, st)
   else if (route === 'play') {
     if (usingTouch() && game) {
-      const level = gameById(save.game).levels.find((item) => item.id === save.level)
-      const actions = new Set(level?.actions ?? [])
-      padButtons = layoutPad(layout, actions.has('jump'), actions.has('brake'), actions.has('interact'))
+      padButtons = layoutPad(layout, currentActions())
       const idle = now - lastInput > 2500
       const held = new Set<string>([...heldCaps.map(capToAction), ...pointers.values()].filter(Boolean) as string[])
       drawPad(ctx, hits, padButtons, held, idle, now)
@@ -222,6 +235,8 @@ function paint(now: number): void {
     }
     drawPadWait(ctx, hits, layout, state())
   }
+  if (route !== 'intro' && overlay !== 'lang') drawCornerFlag(ctx, hits, layout, locale, pressed)
+  if (overlay === 'lang') drawLangPopup(ctx, hits, layout, locale, pressed, copy().language)
 
   exposeDebug()
   requestAnimationFrame(paint)
@@ -296,15 +311,28 @@ function onUp(event: PointerEvent): void {
 function activate(id: string, down: boolean): void {
   if (down) return
   lastInput = performance.now()
+  if (id === 'lang-open') {
+    overlayBack = overlay === 'lang' ? overlayBack : overlay
+    overlay = 'lang'
+    return
+  }
+  if (id === 'lang-dismiss') {
+    overlay = overlayBack
+    overlayBack = null
+    return
+  }
   if (id.startsWith('lang-')) {
     const next = id.slice(5)
     if (isLocale(next) && next !== locale) {
       locale = next
       rememberLocale(next)
-      history.pushState({ route, overlay }, '', localePath(next))
+      history.pushState({ route, overlay: overlayBack }, '', localePath(next))
       applyDocument()
     }
-    overlay = overlay === 'settings' ? null : overlay
+    if (overlay === 'lang') {
+      overlay = overlayBack
+      overlayBack = null
+    }
     return
   }
   if (id === 'cta-device') {
@@ -390,23 +418,29 @@ function activate(id: string, down: boolean): void {
 
 function exposeDebug(): void {
   const padHits = hits.filter((h) => h.id.startsWith('pad-'))
-  const menuHits = hits.filter((h) => !h.id.startsWith('pad-'))
+  const langHits = hits.filter((h) => h.id.startsWith('lang-'))
+  const menuHits = hits.filter((h) => !h.id.startsWith('pad-') && !h.id.startsWith('lang-'))
   const heads = fontMarks.filter((m) => m.role === 'head')
   const bodies = fontMarks.filter((m) => m.role === 'body')
   ;(window as unknown as { __willum: unknown }).__willum = {
     screen: route,
     overlay,
+    overlayBack,
+    locale,
     layout,
     hits,
+    chicken: game?.snapshot() ?? null,
     scale: layout.scale,
     fonts: fontMarks.map((m) => ({ text: m.text, pt: m.pt, role: m.role })),
     taps: menuHits.map((h) => ({ id: h.id, w: h.w, h: h.h, fontPt: h.fontPt })),
     pads: padHits.map((h) => ({ id: h.id, w: h.w, h: h.h })),
+    langs: langHits.map((h) => ({ id: h.id, x: h.x, y: h.y, w: h.w, h: h.h })),
     minFont: fontMarks.reduce((m, h) => Math.min(m, h.pt), 99),
     minHead: heads.reduce((m, h) => Math.min(m, h.pt), 99),
     minBody: bodies.reduce((m, h) => Math.min(m, h.pt), 99),
     minTap: menuHits.reduce((m, h) => Math.min(m, h.h, h.w), 999),
     minPad: padHits.reduce((m, h) => Math.min(m, h.h, h.w), 999),
+    minLang: langHits.reduce((m, h) => Math.min(m, h.h, h.w), 999),
     scene: {
       x: layout.sceneX,
       y: layout.sceneY,
@@ -429,7 +463,10 @@ function onWheel(event: WheelEvent): void {
 function onKey(event: KeyboardEvent): void {
   if (event.code !== 'Escape') return
   event.preventDefault()
-  if (overlay === 'settings') overlay = route === 'play' ? 'pause' : null
+  if (overlay === 'lang') {
+    overlay = overlayBack
+    overlayBack = null
+  } else if (overlay === 'settings') overlay = route === 'play' ? 'pause' : null
   else if (overlay === 'pause') togglePause()
   else if (route === 'play') togglePause()
 }

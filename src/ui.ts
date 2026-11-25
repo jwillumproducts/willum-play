@@ -1,5 +1,6 @@
 import type { Locale } from './copy'
 import { LOCALES, NATIVE_NAME } from './copy'
+import type { ViewLayout } from './viewport'
 
 export const FONT = '"Segoe UI", "Trebuchet MS", "Arial Rounded MT Bold", sans-serif'
 export const INK = '#5c3b32'
@@ -12,6 +13,7 @@ export const ACCENT = '#e07a5f'
 export const TEXT_PT = 16
 export const HEAD_PT = 22
 export const TAP_PT = 64
+export const FLAG_HIT = 44
 
 export interface FontMark {
   text: string
@@ -330,6 +332,88 @@ export function drawFlags(
     })
   }
   return rows * hit + (rows - 1) * gap
+}
+
+export function cornerFlagRect(layout: ViewLayout): { x: number; y: number; w: number; h: number } {
+  const insetR = 8 + layout.safe.r
+  const insetT = 8 + layout.safe.t
+  const x = Math.max(layout.sceneX, layout.viewW - insetR - FLAG_HIT)
+  const y = Math.max(0, insetT)
+  return { x, y, w: FLAG_HIT, h: FLAG_HIT }
+}
+
+export function drawCornerFlag(
+  ctx: CanvasRenderingContext2D,
+  hits: Hit[],
+  layout: ViewLayout,
+  current: Locale,
+  pressedId: string | null,
+): void {
+  const box = cornerFlagRect(layout)
+  const visW = 28
+  const visH = 19
+  const hx = box.x + (box.w - visW) / 2
+  const hy = box.y + (box.h - visH) / 2
+  fillRound(ctx, hx - 3, hy - 3, visW + 6, visH + 6, 6, CREAM, INK, 2)
+  if (pressedId === 'lang-open') ctx.globalAlpha = 0.85
+  drawFlag(ctx, current, hx, hy, visW, visH)
+  ctx.globalAlpha = 1
+  addHit(hits, { id: 'lang-open', x: box.x, y: box.y, w: box.w, h: box.h, fontPt: TEXT_PT })
+}
+
+export function drawLangPopup(
+  ctx: CanvasRenderingContext2D,
+  hits: Hit[],
+  layout: ViewLayout,
+  current: Locale,
+  pressedId: string | null,
+  title: string,
+): void {
+  ctx.fillStyle = 'rgba(92, 59, 50, 0.28)'
+  ctx.fillRect(layout.sceneX, layout.sceneY, layout.sceneW, layout.sceneH)
+  addHit(hits, {
+    id: 'lang-dismiss',
+    x: layout.sceneX,
+    y: layout.sceneY,
+    w: layout.sceneW,
+    h: layout.sceneH,
+    fontPt: TEXT_PT,
+  })
+
+  const gap = 6
+  const cell = FLAG_HIT
+  const inner = 10
+  const titleH = TEXT_PT + 10
+  const maxW = layout.sceneW - 16
+  const cols = Math.max(1, Math.min(LOCALES.length, Math.floor((maxW - inner * 2 + gap) / (cell + gap))))
+  const rows = Math.ceil(LOCALES.length / cols)
+  const gridW = cols * cell + (cols - 1) * gap
+  const gridH = rows * cell + (rows - 1) * gap
+  const w = Math.min(maxW, gridW + inner * 2)
+  const h = titleH + inner * 2 + gridH
+  const x = layout.sceneX + layout.sceneW - 8 - w
+  const y = layout.sceneY + 8
+  const boxX = Math.max(layout.sceneX + 8, x)
+  const boxY = Math.min(layout.sceneY + layout.sceneH - h - 8, Math.max(layout.sceneY + 8, y))
+
+  fillRound(ctx, boxX, boxY, w, h, 16, CREAM, LINE, 3)
+  drawText(ctx, title, boxX + w / 2, boxY + inner + TEXT_PT / 2, TEXT_PT, 'center', MUTED, 700)
+
+  LOCALES.forEach((locale, i) => {
+    const col = i % cols
+    const row = Math.floor(i / cols)
+    const bx = boxX + inner + col * (cell + gap)
+    const by = boxY + inner + titleH + row * (cell + gap)
+    const visW = 32
+    const visH = 22
+    const hx = bx + (cell - visW) / 2
+    const hy = by + (cell - visH) / 2
+    if (locale === current) fillRound(ctx, hx - 3, hy - 3, visW + 6, visH + 6, 6, CREAM, INK, 2)
+    if (pressedId === `lang-${locale}`) ctx.globalAlpha = 0.85
+    drawFlag(ctx, locale, hx, hy, visW, visH)
+    ctx.globalAlpha = 1
+    addHit(hits, { id: `lang-${locale}`, x: bx, y: by, w: cell, h: cell, fontPt: TEXT_PT })
+  })
 }
 
 export { LOCALES, NATIVE_NAME }

@@ -1,15 +1,18 @@
 import type { Action } from './types'
 import { addHit, type Hit } from './ui'
-import type { ViewLayout } from './viewport'
+import type { PadNeed, ViewLayout } from './viewport'
 
 const DIR_HIT = 64
 const DIR_VIS = 52
 const ACT_HIT = 84
 const ACT_VIS = 72
-const GAP = 10
-const INSET = 14
+const GAP = 4
+const INSET = 6
 const PAUSE_HIT = 44
 const PAUSE_VIS = 36
+
+const DIRS: Action[] = ['moveLeft', 'moveRight', 'moveUp', 'moveDown']
+const FACES: Action[] = ['jump', 'brake', 'interact']
 
 export interface PadButton {
   id: Action | 'pause'
@@ -21,14 +24,33 @@ export interface PadButton {
   round: boolean
 }
 
-export function layoutPad(layout: ViewLayout, hasJump: boolean, hasBrake: boolean, hasAct: boolean): PadButton[] {
+export function padNeed(actions: readonly Action[]): PadNeed {
+  const set = new Set(actions)
+  const hasLR = set.has('moveLeft') || set.has('moveRight')
+  const hasUD = set.has('moveUp') || set.has('moveDown')
+  const faces = FACES.filter((action) => set.has(action))
+  let left = 0
+  if (hasUD) left = INSET * 2 + DIR_HIT + 2 * (DIR_VIS + GAP)
+  else if (hasLR) left = INSET * 2 + 2 * DIR_HIT + GAP
+  let right = 0
+  if (faces.length >= 2) right = INSET * 2 + 2 * ACT_HIT + 8
+  else if (faces.length === 1) right = INSET * 2 + ACT_HIT
+  const deck = Math.max(left, right, hasUD ? left : hasLR || faces.length ? DIR_HIT + INSET * 2 : 0)
+  return { left, right, deck }
+}
+
+export function layoutPad(layout: ViewLayout, actions: readonly Action[]): PadButton[] {
+  const set = new Set(actions)
+  const dirs = DIRS.filter((action) => set.has(action))
+  const faces = FACES.filter((action) => set.has(action))
   const safe = layout.safe
   const insetL = INSET + safe.l
   const insetR = INSET + safe.r
   const insetB = INSET + safe.b
   const insetT = INSET + safe.t
   const buttons: PadButton[] = []
-  const crossSpan = DIR_HIT * 3 + GAP * 2
+  const hasUD = dirs.includes('moveUp') || dirs.includes('moveDown')
+  const hasLR = dirs.includes('moveLeft') || dirs.includes('moveRight')
 
   buttons.push({
     id: 'pause',
@@ -40,70 +62,102 @@ export function layoutPad(layout: ViewLayout, hasJump: boolean, hasBrake: boolea
     round: false,
   })
 
-  let originX = insetL + DIR_HIT * 1.5 + GAP
-  let originY = layout.viewH - insetB - DIR_HIT * 1.5 - GAP
+  let originX = insetL + (hasUD ? DIR_HIT + (DIR_VIS + GAP) / 2 : DIR_HIT + GAP / 2)
+  let originY = layout.viewH - insetB - (hasUD ? DIR_HIT + (DIR_VIS + GAP) / 2 : DIR_HIT / 2)
 
   if (layout.mode === 'sidebars') {
-    originX = Math.min(insetL + DIR_HIT * 1.5 + GAP, Math.max(insetL + DIR_HIT, layout.leftBar / 2))
-    originY = layout.viewH - insetB - DIR_HIT * 1.5 - GAP
-    if (originX + crossSpan / 2 > layout.sceneX) originX = Math.max(DIR_HIT * 1.5, layout.leftBar / 2)
+    originX = Math.min(layout.leftBar / 2, layout.sceneX - (hasUD ? DIR_VIS + GAP + DIR_HIT / 2 : DIR_HIT + GAP / 2))
+    originY = layout.viewH - insetB - (hasUD ? DIR_HIT + (DIR_VIS + GAP) / 2 : DIR_HIT / 2)
   } else if (layout.mode === 'deck') {
-    originX = insetL + DIR_HIT * 1.5 + GAP
-    originY = layout.sceneY + layout.sceneH + Math.max(DIR_HIT * 1.5, (layout.deckH - insetB) / 2)
-  } else {
-    originX = insetL + DIR_HIT * 1.5 + GAP
-    originY = layout.viewH - insetB - DIR_HIT * 1.5 - GAP
+    originX = insetL + (hasUD ? DIR_HIT + (DIR_VIS + GAP) / 2 : DIR_HIT + GAP / 2)
+    originY = layout.sceneY + layout.sceneH + Math.max(DIR_HIT, (layout.deckH - insetB) / 2)
   }
 
-  originX = clamp(originX, DIR_HIT, layout.viewW - DIR_HIT)
-  originY = clamp(originY, DIR_HIT, layout.viewH - DIR_HIT)
+  originX = clamp(originX, DIR_HIT / 2, layout.viewW - DIR_HIT / 2)
+  originY = clamp(originY, DIR_HIT / 2, layout.viewH - DIR_HIT / 2)
 
   const placeDir = (action: Action, dx: number, dy: number): void => {
+    const cx = clampBar(
+      originX + dx * (DIR_VIS + GAP),
+      DIR_HIT,
+      layout,
+      'left',
+    )
+    const cy = clamp(originY + dy * (DIR_VIS + GAP), DIR_HIT / 2, layout.viewH - DIR_HIT / 2)
     buttons.push({
       id: action,
       action,
-      cx: clamp(originX + dx * (DIR_VIS + GAP), DIR_HIT / 2, layout.viewW - DIR_HIT / 2),
-      cy: clamp(originY + dy * (DIR_VIS + GAP), DIR_HIT / 2, layout.viewH - DIR_HIT / 2),
+      cx,
+      cy,
       hit: DIR_HIT,
       vis: DIR_VIS,
       round: false,
     })
   }
 
-  placeDir('moveLeft', -1, 0)
-  placeDir('moveRight', 1, 0)
-  placeDir('moveUp', 0, -1)
-  placeDir('moveDown', 0, 1)
+  if (hasLR) {
+    if (hasUD) {
+      placeDir('moveLeft', -1, 0)
+      placeDir('moveRight', 1, 0)
+    } else {
+      const spread = (DIR_HIT + GAP) / 2 / (DIR_VIS + GAP)
+      placeDir('moveLeft', -spread, 0)
+      placeDir('moveRight', spread, 0)
+    }
+  }
+  if (dirs.includes('moveUp')) placeDir('moveUp', 0, -1)
+  if (dirs.includes('moveDown')) placeDir('moveDown', 0, 1)
 
   let ax = layout.viewW - insetR - ACT_HIT / 2
   let ay = layout.viewH - insetB - ACT_HIT / 2
   if (layout.mode === 'sidebars') {
-    ax = layout.viewW - insetR - ACT_HIT / 2
+    ax = layout.sceneX + layout.sceneW + Math.max(ACT_HIT / 2 + INSET, layout.rightBar / 2)
     ay = layout.viewH - insetB - ACT_HIT / 2
   } else if (layout.mode === 'deck') {
     ay = originY
   }
-  ax = clamp(ax, ACT_HIT / 2, layout.viewW - ACT_HIT / 2)
+  ax = clampBar(ax, ACT_HIT, layout, 'right')
   ay = clamp(ay, ACT_HIT / 2, layout.viewH - ACT_HIT / 2)
 
-  const face: Action = hasBrake ? 'brake' : 'jump'
-  if (hasAct) {
+  faces.forEach((action, i) => {
+    const extra = faces.length > 1 ? (i === 0 ? -(ACT_HIT + 8) : 0) : 0
     buttons.push({
-      id: face,
-      action: face,
-      cx: ax - (ACT_HIT + 8),
+      id: action,
+      action,
+      cx: clampBar(ax + extra, ACT_HIT, layout, 'right'),
       cy: ay,
       hit: ACT_HIT,
       vis: ACT_VIS,
       round: true,
     })
-    buttons.push({ id: 'interact', action: 'interact', cx: ax, cy: ay, hit: ACT_HIT, vis: ACT_VIS, round: true })
-  } else {
-    buttons.push({ id: face, action: face, cx: ax, cy: ay, hit: ACT_HIT, vis: ACT_VIS, round: true })
-  }
-  void hasJump
+  })
 
-  return buttons
+  return buttons.map((button) => clampHit(button, layout))
+}
+
+function clampBar(cx: number, hit: number, layout: ViewLayout, side: 'left' | 'right'): number {
+  if (layout.mode !== 'sidebars') {
+    return clamp(cx, hit / 2, layout.viewW - hit / 2)
+  }
+  if (side === 'left') {
+    const max = layout.sceneX - hit / 2
+    return clamp(cx, hit / 2, Math.max(hit / 2, max))
+  }
+  const min = layout.sceneX + layout.sceneW + hit / 2
+  return clamp(cx, Math.min(min, layout.viewW - hit / 2), layout.viewW - hit / 2)
+}
+
+function clampHit(button: PadButton, layout: ViewLayout): PadButton {
+  const half = button.hit / 2
+  let cx = clamp(button.cx, half, layout.viewW - half)
+  let cy = clamp(button.cy, half, layout.viewH - half)
+  if (layout.mode === 'sidebars' && button.action !== 'pause') {
+    const left = button.action.startsWith('move')
+    if (left) cx = Math.min(cx, layout.sceneX - half)
+    else cx = Math.max(cx, layout.sceneX + layout.sceneW + half)
+    cx = clamp(cx, half, layout.viewW - half)
+  }
+  return { ...button, cx, cy }
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -232,4 +286,4 @@ export function padAt(buttons: PadButton[], x: number, y: number): PadButton | n
   return best
 }
 
-export { DIR_HIT, ACT_HIT, PAUSE_HIT }
+export { DIR_HIT, ACT_HIT, PAUSE_HIT, GAP }

@@ -140,7 +140,6 @@ export function drawDevice(ctx: CanvasRenderingContext2D, hits: Hit[], layout: V
   let y = s.y
   drawText(ctx, BRAND, s.cx, y + HEAD_PT / 2, HEAD_PT, 'center', INK, 800)
   y += HEAD_PT + 8
-  y += drawFlags(ctx, hits, s.x, y, s.w, state.locale, state.pressed) + 8
   if (s.h >= 420) y += drawWrapped(ctx, state.copy.deviceLead, s.cx, y + 6, s.w, TEXT_PT, 'center', INK) + 12
 
   const gap = 10
@@ -365,10 +364,7 @@ export function drawSettings(ctx: CanvasRenderingContext2D, hits: Hit[], layout:
   fillRound(ctx, box.x, box.y, box.w, box.h, 22, CREAM, LINE, 3)
   let cy = box.y + inner + HEAD_PT / 2
   drawText(ctx, state.copy.settings, box.x + box.w / 2, cy, HEAD_PT, 'center', INK, 800)
-  cy += HEAD_PT / 2 + 8
-  drawText(ctx, state.copy.language, box.x + box.w / 2, cy + 8, TEXT_PT, 'center', MUTED, 600)
-  cy += 18
-  cy += drawFlags(ctx, hits, box.x + inner, cy, box.w - inner * 2, state.locale, state.pressed) + 10
+  cy += HEAD_PT / 2 + 12
   const cols = short ? 2 : 1
   const items = [
     { id: 'set-sound', title: state.muted ? state.copy.soundOn : state.copy.soundOff },

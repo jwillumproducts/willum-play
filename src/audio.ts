@@ -1,6 +1,31 @@
+export type ClipUrl = string | readonly string[]
+
 export interface ClipBank {
-  peck: string
-  peep?: string
+  peck: ClipUrl
+  peep?: ClipUrl
+}
+
+function asList(url: ClipUrl | undefined): string[] {
+  if (!url) return []
+  return typeof url === 'string' ? [url] : [...url]
+}
+
+function canPlay(url: string): boolean {
+  const ext = url.split('.').pop()?.toLowerCase()
+  const probe = document.createElement('audio')
+  const type =
+    ext === 'm4a' || ext === 'aac' || ext === 'mp4'
+      ? 'audio/mp4'
+      : ext === 'mp3'
+        ? 'audio/mpeg'
+        : ext === 'ogg'
+          ? 'audio/ogg'
+          : ext === 'wav'
+            ? 'audio/wav'
+            : ''
+  if (!type) return true
+  const rank = probe.canPlayType(type)
+  return rank === 'probably' || rank === 'maybe'
 }
 
 export class Sound {
@@ -10,6 +35,7 @@ export class Sound {
   private bank: ClipBank | null = null
   private clips = new Map<string, AudioBuffer>()
   private loading = new Set<string>()
+  private chosen = new Map<string, string>()
 
   unlock(): void {
     try {
@@ -33,8 +59,8 @@ export class Sound {
 
   use(bank: ClipBank): void {
     this.bank = bank
-    this.load(bank.peck)
-    if (bank.peep) this.load(bank.peep)
+    this.prepare(bank.peck)
+    if (bank.peep) this.prepare(bank.peep)
   }
 
   step(): void {
@@ -80,8 +106,17 @@ export class Sound {
 
   peck(): void {
     if (this.playClip(this.bank?.peck)) return
-    this.tone(740, 0.07, 0.05)
-    this.tone(480, 0.09, 0.04)
+    const urls = asList(this.bank?.peck).join(' ')
+    if (urls.includes('horn')) this.hornSynth()
+    else this.cluckSynth()
+  }
+
+  private prepare(url: ClipUrl): void {
+    const list = asList(url)
+    const pick = list.find((item) => canPlay(item)) ?? list[0]
+    if (!pick) return
+    this.chosen.set(list[0], pick)
+    this.load(pick)
   }
 
   private load(url: string): void {
@@ -95,19 +130,27 @@ export class Sound {
         if (!response.ok) throw new Error('lyd')
         return response.arrayBuffer()
       })
-      .then((data) => ctx.decodeAudioData(data))
+      .then((data) => ctx.decodeAudioData(data.slice(0)))
       .then((buffer) => {
         this.clips.set(url, buffer)
+        this.loading.delete(url)
       })
       .catch(() => {
         this.loading.delete(url)
       })
   }
 
-  private playClip(url: string | undefined): boolean {
-    if (!url) return false
+  private resolve(url: ClipUrl | undefined): string | undefined {
+    const list = asList(url)
+    if (!list.length) return undefined
+    return this.chosen.get(list[0]) ?? list.find((item) => this.clips.has(item)) ?? list[0]
+  }
+
+  private playClip(url: ClipUrl | undefined): boolean {
+    const pick = this.resolve(url)
+    if (!pick) return false
     if (this.muted) return true
-    const buffer = this.clips.get(url)
+    const buffer = this.clips.get(pick)
     const ctx = this.ctx
     const master = this.master
     if (!buffer || !ctx || !master) return false
@@ -126,6 +169,71 @@ export class Sound {
     if (!this.master || !this.ctx) return
     const target = this.muted ? 0 : 0.9
     this.master.gain.setTargetAtTime(target, this.ctx.currentTime, 0.02)
+  }
+
+  private cluckSynth(): void {
+    const ctx = this.ctx
+    const master = this.master
+    if (!ctx || !master || this.muted) return
+    const bursts = [0, 0.11]
+    for (const delay of bursts) {
+      const now = ctx.currentTime + delay
+      const length = Math.max(1, Math.floor(ctx.sampleRate * 0.08))
+      const buffer = ctx.createBuffer(1, length, ctx.sampleRate)
+      const data = buffer.getChannelData(0)
+      for (let i = 0; i < length; i += 1) {
+        const env = Math.sin((i / length) * Math.PI)
+        data[i] = (Math.random() * 2 - 1) * env
+      }
+      const source = ctx.createBufferSource()
+      source.buffer = buffer
+      const filter = ctx.createBiquadFilter()
+      filter.type = 'bandpass'
+      filter.frequency.value = 820
+      filter.Q.value = 4
+      const amp = ctx.createGain()
+      amp.gain.setValueAtTime(0.0001, now)
+      amp.gain.exponentialRampToValueAtTime(0.55, now + 0.012)
+      amp.gain.exponentialRampToValueAtTime(0.001, now + 0.08)
+      source.connect(filter)
+      filter.connect(amp)
+      amp.connect(master)
+      source.start(now)
+      source.stop(now + 0.09)
+
+      const osc = ctx.createOscillator()
+      const oamp = ctx.createGain()
+      osc.type = 'triangle'
+      osc.frequency.setValueAtTime(430, now)
+      osc.frequency.exponentialRampToValueAtTime(260, now + 0.07)
+      oamp.gain.setValueAtTime(0.12, now)
+      oamp.gain.exponentialRampToValueAtTime(0.001, now + 0.07)
+      osc.connect(oamp)
+      oamp.connect(master)
+      osc.start(now)
+      osc.stop(now + 0.08)
+    }
+  }
+
+  private hornSynth(): void {
+    const ctx = this.ctx
+    const master = this.master
+    if (!ctx || !master || this.muted) return
+    const now = ctx.currentTime
+    for (const freq of [311, 392]) {
+      const osc = ctx.createOscillator()
+      const amp = ctx.createGain()
+      osc.type = 'sawtooth'
+      osc.frequency.setValueAtTime(freq, now)
+      amp.gain.setValueAtTime(0.0001, now)
+      amp.gain.exponentialRampToValueAtTime(0.18, now + 0.02)
+      amp.gain.setValueAtTime(0.16, now + 0.22)
+      amp.gain.exponentialRampToValueAtTime(0.001, now + 0.38)
+      osc.connect(amp)
+      amp.connect(master)
+      osc.start(now)
+      osc.stop(now + 0.4)
+    }
   }
 
   private tone(freq: number, dur: number, gain: number): void {

@@ -32,13 +32,26 @@ body,
   background: #f3c9a4;
 }
 
+html,
 body {
   position: fixed;
   inset: 0;
 }
 
-#stage {
+#app {
   position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
   display: block;
   touch-action: none;
   user-select: none;

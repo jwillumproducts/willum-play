@@ -2,8 +2,8 @@ import { CAR_LEVELS, LEVELS } from './levels'
 import type { GameId, LevelConfig } from './types'
 
 export interface GameSounds {
-  peck: string
-  peep?: string
+  peck: string | readonly string[]
+  peep?: string | readonly string[]
 }
 
 export interface MiniGame {
@@ -19,7 +19,7 @@ export const GAMES: MiniGame[] = [
     name: 'Hønen',
     levels: LEVELS,
     sounds: {
-      peck: 'sounds/hen/cluck.wav',
+      peck: ['sounds/hen/cluck.m4a', 'sounds/hen/cluck.mp3'],
       peep: 'sounds/hen/peep.wav',
     },
   },
@@ -28,7 +28,7 @@ export const GAMES: MiniGame[] = [
     name: 'Bilen',
     levels: CAR_LEVELS,
     sounds: {
-      peck: 'sounds/car/horn.wav',
+      peck: ['sounds/car/horn.m4a', 'sounds/car/horn.mp3'],
     },
   },
 ]

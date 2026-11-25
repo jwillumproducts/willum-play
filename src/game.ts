@@ -115,24 +115,22 @@ export class Game {
     if (this.chicken.x < minSceneX) this.chicken.x = minSceneX
   }
 
-  keepClear(leftCss: number, rightCss: number, bottomCss: number, scale: number): void {
-    if (scale <= 0) return
-    const left = leftCss / scale
-    const right = rightCss / scale
-    const bottom = bottomCss / scale
-    const minX = left + 48
-    const maxX = VIEW_W - right - 48
-    const sx = this.chicken.x - this.camX
-    if (sx < minX) this.camX = this.chicken.x - minX
-    else if (sx > maxX) this.camX = this.chicken.x - maxX
-    this.camX = Math.max(0, Math.min(this.camX, VIEW_W * 0.35))
-    if (this.level.camera === 'top') {
-      const maxY = VIEW_H - bottom - 48
-      const sy = this.chicken.y - this.camY
-      if (sy > maxY) this.camY = this.chicken.y - maxY
-      this.camY = Math.max(0, this.camY)
-    } else {
-      this.camY = 0
+  snapshot() {
+    const chicken = this.chicken
+    return {
+      x: chicken.x,
+      y: chicken.y,
+      vx: chicken.vx,
+      vy: chicken.vy,
+      onGround: chicken.onGround,
+      moving: chicken.moving,
+      braking: chicken.braking,
+      peck: chicken.peck,
+      facing: chicken.facing,
+      camX: this.camX,
+      camY: this.camY,
+      camera: this.level.camera,
+      actions: [...this.level.actions],
     }
   }
 

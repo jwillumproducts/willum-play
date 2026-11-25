@@ -15,6 +15,12 @@ export interface SafeArea {
   l: number
 }
 
+export interface PadNeed {
+  left: number
+  right: number
+  deck: number
+}
+
 export interface ViewLayout {
   left: number
   top: number
@@ -70,7 +76,7 @@ export function safeArea(): SafeArea {
   }
 }
 
-export function computeLayout(fillView = false): ViewLayout {
+export function computeLayout(fillView = false, need: PadNeed = { left: 0, right: 0, deck: 0 }): ViewLayout {
   const box = visualBox()
   const safe = safeArea()
   const dpr = Math.min(3, window.devicePixelRatio || 1)
@@ -107,27 +113,31 @@ export function computeLayout(fillView = false): ViewLayout {
   const ah = Math.max(1, box.height - safe.t - safe.b - edge * 2)
   const contain = Math.min(aw / SCENE_W, ah / SCENE_H)
   const minScale = contain * (1 - SHRINK_MAX)
+  const needL = Math.max(0, need.left)
+  const needR = Math.max(0, need.right)
+  const needSum = needL + needR
+  const needDeck = Math.max(0, need.deck)
 
   let scale = contain
   let mode: PadMode = 'overlay'
 
-  const sideAt = (s: number): number => (aw - SCENE_W * s) / 2
-  const vertAt = (s: number): number => (ah - SCENE_H * s) / 2
+  const sideAt = (s: number): number => aw - SCENE_W * s
+  const vertAt = (s: number): number => ah - SCENE_H * s
 
-  if (sideAt(contain) >= BAR_MIN) {
+  if (needSum > 0 && sideAt(contain) >= needSum) {
     mode = 'sidebars'
     scale = contain
-  } else if (vertAt(contain) >= BAR_MIN) {
+  } else if (needDeck > 0 && vertAt(contain) >= needDeck) {
     mode = 'deck'
     scale = contain
-  } else {
-    const scaleBars = (aw - BAR_MIN * 2) / SCENE_W
+  } else if (needSum > 0) {
+    const scaleBars = (aw - needSum) / SCENE_W
     if (scaleBars >= minScale && scaleBars > 0 && SCENE_H * Math.min(contain, scaleBars) <= ah) {
       scale = Math.min(contain, scaleBars)
       mode = 'sidebars'
     } else {
-      const scaleDeck = (ah - BAR_MIN) / SCENE_H
-      if (scaleDeck >= minScale && scaleDeck > 0 && SCENE_W * Math.min(contain, scaleDeck) <= aw) {
+      const scaleDeck = (ah - needDeck) / SCENE_H
+      if (needDeck > 0 && scaleDeck >= minScale && scaleDeck > 0 && SCENE_W * Math.min(contain, scaleDeck) <= aw) {
         scale = Math.min(contain, scaleDeck)
         mode = 'deck'
       } else {
@@ -135,14 +145,23 @@ export function computeLayout(fillView = false): ViewLayout {
         scale = contain
       }
     }
+  } else {
+    mode = 'overlay'
+    scale = contain
   }
 
   const sceneW = SCENE_W * scale
   const sceneH = SCENE_H * scale
-  let sceneX = x0 + (aw - sceneW) / 2
-  let sceneY = y0 + (ah - sceneH) / 2
-  if (mode === 'deck') sceneY = y0
-  if (mode === 'sidebars') sceneX = x0 + (aw - sceneW) / 2
+  const extraX = Math.max(0, aw - sceneW)
+  const extraY = Math.max(0, ah - sceneH)
+  let sceneX = x0 + extraX / 2
+  let sceneY = y0 + extraY / 2
+  if (mode === 'sidebars') {
+    const rest = Math.max(0, extraX - needL - needR)
+    sceneX = x0 + needL + rest / 2
+  } else if (mode === 'deck') {
+    sceneY = y0
+  }
 
   return {
     left: box.left,
