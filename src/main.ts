@@ -3,7 +3,7 @@ import { Sound } from './audio'
 import { BRAND, COPY, fill, isLocale, type Copy, type Locale } from './copy'
 import { Game } from './game'
 import { gameById } from './games'
-import { drawPad, layoutPad, padAt, remapBrake, type PadButton } from './gamepad'
+import { drawPad, layoutPad, padAt, type PadButton } from './gamepad'
 import { detectLocale, localeFromPath, localePath, publicUrl, rememberLocale } from './locale'
 import { samplePads, type PadSnapshot } from './pads'
 import {
@@ -156,7 +156,7 @@ function padMessage(): string {
 }
 
 function sizeCanvas(): void {
-  layout = computeLayout()
+  layout = computeLayout(route !== 'play')
   const { viewW, viewH, dpr, left, top } = layout
   canvas.style.left = `${left}px`
   canvas.style.top = `${top}px`
@@ -203,12 +203,8 @@ function paint(now: number): void {
   else if (route === 'play') {
     if (usingTouch() && game) {
       const level = gameById(save.game).levels.find((item) => item.id === save.level)
-      const cam = level?.camera ?? 'side'
       const actions = new Set(level?.actions ?? [])
-      padButtons = remapBrake(
-        layoutPad(layout, cam, actions.has('jump') || actions.has('brake'), actions.has('interact')),
-        actions.has('brake'),
-      )
+      padButtons = layoutPad(layout, actions.has('jump'), actions.has('brake'), actions.has('interact'))
       const idle = now - lastInput > 2500
       const held = new Set<string>([...heldCaps.map(capToAction), ...pointers.values()].filter(Boolean) as string[])
       drawPad(ctx, hits, padButtons, held, idle, now)
@@ -411,6 +407,16 @@ function exposeDebug(): void {
     minBody: bodies.reduce((m, h) => Math.min(m, h.pt), 99),
     minTap: menuHits.reduce((m, h) => Math.min(m, h.h, h.w), 999),
     minPad: padHits.reduce((m, h) => Math.min(m, h.h, h.w), 999),
+    scene: {
+      x: layout.sceneX,
+      y: layout.sceneY,
+      w: layout.sceneW,
+      h: layout.sceneH,
+      viewW: layout.viewW,
+      viewH: layout.viewH,
+      mode: layout.mode,
+      fillView: layout.fillView,
+    },
   }
 }
 

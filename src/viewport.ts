@@ -2,7 +2,7 @@ import { VIEW_H, VIEW_W } from './world'
 
 export const SCENE_W = VIEW_W
 export const SCENE_H = VIEW_H
-export const BAR_MIN = 176
+export const BAR_MIN = 180
 export const SHRINK_MAX = 0.15
 export const THUMB_CSS = 200
 
@@ -33,6 +33,7 @@ export interface ViewLayout {
   deckH: number
   portrait: boolean
   phone: boolean
+  fillView: boolean
 }
 
 function positive(value: number | undefined, fallback: number): number {
@@ -47,18 +48,17 @@ function readPx(name: string): number {
 
 export function visualBox(): { left: number; top: number; width: number; height: number } {
   const vv = window.visualViewport
+  if (vv && positive(vv.width, 0) > 0 && positive(vv.height, 0) > 0) {
+    return {
+      left: vv.offsetLeft || 0,
+      top: vv.offsetTop || 0,
+      width: vv.width,
+      height: vv.height,
+    }
+  }
   const innerW = positive(window.innerWidth, 1)
   const innerH = positive(window.innerHeight, 1)
-  const clientW = positive(document.documentElement.clientWidth, innerW)
-  const clientH = positive(document.documentElement.clientHeight, innerH)
-  const vvW = positive(vv?.width, innerW)
-  const vvH = positive(vv?.height, innerH)
-  return {
-    left: vv?.offsetLeft ?? 0,
-    top: vv?.offsetTop ?? 0,
-    width: Math.max(1, Math.min(vvW, innerW, clientW)),
-    height: Math.max(1, Math.min(vvH, innerH, clientH)),
-  }
+  return { left: 0, top: 0, width: innerW, height: innerH }
 }
 
 export function safeArea(): SafeArea {
@@ -70,9 +70,36 @@ export function safeArea(): SafeArea {
   }
 }
 
-export function computeLayout(): ViewLayout {
+export function computeLayout(fillView = false): ViewLayout {
   const box = visualBox()
   const safe = safeArea()
+  const dpr = Math.min(3, window.devicePixelRatio || 1)
+  const portrait = box.height > box.width
+  const phone = Math.min(box.width, box.height) < 600
+
+  if (fillView) {
+    return {
+      left: box.left,
+      top: box.top,
+      viewW: box.width,
+      viewH: box.height,
+      dpr,
+      safe,
+      scale: Math.min(box.width / SCENE_W, box.height / SCENE_H),
+      sceneX: 0,
+      sceneY: 0,
+      sceneW: box.width,
+      sceneH: box.height,
+      mode: 'overlay',
+      leftBar: 0,
+      rightBar: 0,
+      deckH: 0,
+      portrait,
+      phone,
+      fillView: true,
+    }
+  }
+
   const edge = 4
   const x0 = safe.l + edge
   const y0 = safe.t + edge
@@ -122,7 +149,7 @@ export function computeLayout(): ViewLayout {
     top: box.top,
     viewW: box.width,
     viewH: box.height,
-    dpr: Math.min(3, window.devicePixelRatio || 1),
+    dpr,
     safe,
     scale,
     sceneX,
@@ -133,8 +160,9 @@ export function computeLayout(): ViewLayout {
     leftBar: sceneX,
     rightBar: box.width - (sceneX + sceneW),
     deckH: box.height - safe.b - (sceneY + sceneH),
-    portrait: box.height > box.width,
-    phone: Math.min(box.width, box.height) < 600,
+    portrait,
+    phone,
+    fillView: false,
   }
 }
 
